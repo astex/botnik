@@ -27,3 +27,5 @@ qt_add_resources(botnik "qml"
     FILES
         qml/Main.qml
 )
+
+add_subdirectory(apps/clock)

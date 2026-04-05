@@ -1,6 +1,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import QtWayland.Compositor 1.15
 
 Rectangle {
     id: root
@@ -10,6 +11,25 @@ Rectangle {
         anchors.fill: parent
         anchors.margins: 16
         spacing: 12
+
+        // Client surface area
+        Flow {
+            id: surfaceArea
+            Layout.fillWidth: true
+            Layout.preferredHeight: surfaceRepeater.count > 0 ? 40 : 0
+            spacing: 8
+            visible: surfaceRepeater.count > 0
+
+            Repeater {
+                id: surfaceRepeater
+                model: surfaceModel
+
+                ShellSurfaceItem {
+                    shellSurface: model.xdgSurface
+                    autoCreatePopupItems: false
+                }
+            }
+        }
 
         ListView {
             id: messageList

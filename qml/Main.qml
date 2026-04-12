@@ -14,44 +14,90 @@ Rectangle {
         anchors.margins: 16
         spacing: 12
 
-        // Left: workspace area (tiled surfaces)
-        Item {
-            id: workspaceArea
+        // Left: workspace area with tab bar
+        ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
             visible: root.hasActiveWorkspace
+            spacing: 0
 
-            onWidthChanged: reportSize()
-            onHeightChanged: reportSize()
-            onVisibleChanged: reportSize()
+            // Tab bar
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 32
+                color: "#073642"
+                radius: 4
 
-            function reportSize() {
-                if (visible && width > 0 && height > 0) {
-                    compositor.setClientArea(Math.round(width), Math.round(height));
+                ListView {
+                    id: tabBar
+                    anchors.fill: parent
+                    anchors.margins: 2
+                    orientation: ListView.Horizontal
+                    model: workspaceModel
+                    spacing: 4
+                    clip: true
+
+                    delegate: Rectangle {
+                        width: tabLabel.implicitWidth + 24
+                        height: tabBar.height
+                        color: index === workspaceModel.activeIndex ? "#2aa198" : "#002b36"
+                        radius: 3
+
+                        Text {
+                            id: tabLabel
+                            anchors.centerIn: parent
+                            text: model.title
+                            color: index === workspaceModel.activeIndex ? "#002b36" : "#839496"
+                            font.family: "monospace"
+                            font.pixelSize: 12
+                            elide: Text.ElideRight
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: workspaceModel.activateWorkspace(index)
+                        }
+                    }
                 }
             }
 
-            Repeater {
-                id: workspaceRepeater
-                model: workspaceModel
+            // Workspace surface area (tiled)
+            Item {
+                id: workspaceArea
+                Layout.fillWidth: true
+                Layout.fillHeight: true
 
-                ShellSurfaceItem {
-                    shellSurface: model.xdgSurface
-                    autoCreatePopupItems: false
+                onWidthChanged: reportSize()
+                onHeightChanged: reportSize()
+                onVisibleChanged: reportSize()
 
-                    // Tiling geometry
-                    readonly property int totalCount: workspaceModel.count
-                    readonly property int cols: Math.min(totalCount, 2)
-                    readonly property int rows: Math.ceil(totalCount / cols)
-                    readonly property int row: Math.floor(index / cols)
-                    readonly property int col: index % cols
-                    // Last row may have fewer items — stretch to fill
-                    readonly property int itemsInRow: (row === rows - 1) ? (totalCount - row * cols) : cols
+                function reportSize() {
+                    if (visible && width > 0 && height > 0) {
+                        compositor.setClientArea(Math.round(width), Math.round(height));
+                    }
+                }
 
-                    x: col * (workspaceArea.width / itemsInRow)
-                    y: row * (workspaceArea.height / rows)
-                    width: workspaceArea.width / itemsInRow
-                    height: workspaceArea.height / rows
+                Repeater {
+                    id: workspaceRepeater
+                    model: workspaceModel
+
+                    ShellSurfaceItem {
+                        shellSurface: model.xdgSurface
+                        autoCreatePopupItems: false
+
+                        // Tiling geometry
+                        readonly property int totalCount: workspaceModel.count
+                        readonly property int cols: Math.min(totalCount, 2)
+                        readonly property int rows: Math.ceil(totalCount / cols)
+                        readonly property int row: Math.floor(index / cols)
+                        readonly property int col: index % cols
+                        readonly property int itemsInRow: (row === rows - 1) ? (totalCount - row * cols) : cols
+
+                        x: col * (workspaceArea.width / itemsInRow)
+                        y: row * (workspaceArea.height / rows)
+                        width: workspaceArea.width / itemsInRow
+                        height: workspaceArea.height / rows
+                    }
                 }
             }
         }
@@ -137,6 +183,9 @@ Rectangle {
         target: compositor
         function onHotkeyFocusChat() {
             input.forceActiveFocus();
+        }
+        function onHotkeyActivateWorkspace(index) {
+            workspaceModel.activateWorkspace(index);
         }
     }
 }

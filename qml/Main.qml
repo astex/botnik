@@ -9,13 +9,12 @@ Rectangle {
 
     readonly property bool hasActiveWorkspace: workspaceModel.activeIndex >= 0
 
-    ColumnLayout {
+    RowLayout {
         anchors.fill: parent
         anchors.margins: 16
         spacing: 12
 
-        // Workspace area: fills the space above the chat input when a
-        // workspace is active, otherwise collapsed so the chat log takes over.
+        // Left: workspace area (gets majority of screen)
         Item {
             id: workspaceArea
             Layout.fillWidth: true
@@ -45,73 +44,87 @@ Rectangle {
             }
         }
 
-        ListView {
-            id: messageList
-            Layout.fillWidth: true
+        // Right: chat sidebar (always visible)
+        ColumnLayout {
+            id: chatSidebar
+            Layout.preferredWidth: root.hasActiveWorkspace ? 320 : -1
+            Layout.fillWidth: !root.hasActiveWorkspace
             Layout.fillHeight: true
-            visible: !root.hasActiveWorkspace
-            model: chatModel
-            clip: true
             spacing: 8
 
-            delegate: Rectangle {
-                width: messageList.width
-                height: msgText.implicitHeight + 16
-                color: model.role === "user" ? "#073642" : "#002b36"
-                radius: 6
+            ListView {
+                id: messageList
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                model: chatModel
+                clip: true
+                spacing: 8
 
-                Text {
-                    id: msgText
-                    anchors.fill: parent
-                    anchors.margins: 8
-                    text: model.content
-                    color: model.role === "user" ? "#839496" : "#2aa198"
-                    wrapMode: Text.Wrap
-                    font.family: "monospace"
-                    font.pixelSize: 14
+                delegate: Rectangle {
+                    width: messageList.width
+                    height: msgText.implicitHeight + 16
+                    color: model.role === "user" ? "#073642" : "#002b36"
+                    radius: 6
+
+                    Text {
+                        id: msgText
+                        anchors.fill: parent
+                        anchors.margins: 8
+                        text: model.content
+                        color: model.role === "user" ? "#839496" : "#2aa198"
+                        wrapMode: Text.Wrap
+                        font.family: "monospace"
+                        font.pixelSize: 14
+                    }
                 }
-            }
 
-            onCountChanged: {
-                Qt.callLater(function() {
-                    messageList.positionViewAtEnd();
-                });
-            }
-
-            // Also scroll when content of last message changes (streaming)
-            Connections {
-                target: chatModel
-                function onDataChanged() {
+                onCountChanged: {
                     Qt.callLater(function() {
                         messageList.positionViewAtEnd();
                     });
                 }
-            }
-        }
 
-        Rectangle {
-            Layout.fillWidth: true
-            height: 40
-            color: "#073642"
-            radius: 6
-
-            TextInput {
-                id: input
-                anchors.fill: parent
-                anchors.margins: 8
-                color: "#839496"
-                font.family: "monospace"
-                font.pixelSize: 14
-                clip: true
-                focus: true
-
-                onAccepted: {
-                    if (text.trim().length > 0) {
-                        chatModel.addUserMessage(text);
-                        text = "";
+                Connections {
+                    target: chatModel
+                    function onDataChanged() {
+                        Qt.callLater(function() {
+                            messageList.positionViewAtEnd();
+                        });
                     }
                 }
             }
+
+            Rectangle {
+                Layout.fillWidth: true
+                height: 40
+                color: "#073642"
+                radius: 6
+
+                TextInput {
+                    id: input
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    color: "#839496"
+                    font.family: "monospace"
+                    font.pixelSize: 14
+                    clip: true
+                    focus: true
+
+                    onAccepted: {
+                        if (text.trim().length > 0) {
+                            chatModel.addUserMessage(text);
+                            text = "";
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Connections {
+        target: compositor
+        function onHotkeyFocusChat() {
+            input.forceActiveFocus();
         }
     }
 }

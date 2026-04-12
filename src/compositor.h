@@ -53,11 +53,18 @@ public:
 
     Q_INVOKABLE void setClientArea(int width, int height);
 
+signals:
+    void hotkeyFocusChat();
+
+protected:
+    bool eventFilter(QObject *obj, QEvent *event) override;
+
 private slots:
     void onToplevelCreated(QWaylandXdgToplevel *toplevel,
                            QWaylandXdgSurface *xdgSurface);
 
 private:
+    QQuickWindow *m_window = nullptr;
     QWaylandOutput *m_output = nullptr;
     QWaylandXdgShell *m_xdgShell = nullptr;
     WorkspaceModel m_workspaceModel;

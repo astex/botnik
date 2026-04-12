@@ -1,4 +1,5 @@
 #include "compositor.h"
+#include <QKeyEvent>
 #include <QWaylandSurface>
 
 // --- WorkspaceModel ---
@@ -92,7 +93,10 @@ void WorkspaceModel::setActiveIndex(int index)
 
 Compositor::Compositor(QQuickWindow *window)
     : QWaylandCompositor()
+    , m_window(window)
 {
+    window->installEventFilter(this);
+
     m_output = new QWaylandOutput(this, window);
 
     QWaylandOutputMode mode(window->size(), 60000);
@@ -118,6 +122,22 @@ void Compositor::setClientArea(int width, int height)
         if (auto *tl = m_workspaceModel.toplevelAt(i))
             tl->sendConfigure(m_clientArea, QList<QWaylandXdgToplevel::State>());
     }
+}
+
+bool Compositor::eventFilter(QObject *obj, QEvent *event)
+{
+    if (event->type() == QEvent::KeyPress) {
+        auto *ke = static_cast<QKeyEvent *>(event);
+        if (ke->modifiers() & Qt::MetaModifier) {
+            switch (ke->key()) {
+            case Qt::Key_Space:
+                emit hotkeyFocusChat();
+                return true;
+            // Future Meta+<key> hotkeys go here.
+            }
+        }
+    }
+    return QWaylandCompositor::eventFilter(obj, event);
 }
 
 void Compositor::onToplevelCreated(QWaylandXdgToplevel *toplevel,

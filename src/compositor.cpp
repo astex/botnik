@@ -46,6 +46,7 @@ void WorkspaceModel::addWorkspace(QWaylandXdgSurface *surface,
 
     // Newest wins.
     setActiveIndex(m_workspaces.size() - 1);
+    emit countChanged();
 }
 
 void WorkspaceModel::removeBySurface(QWaylandXdgSurface *surface)
@@ -79,6 +80,7 @@ void WorkspaceModel::removeBySurface(QWaylandXdgSurface *surface)
         newActive = m_activeIndex - 1;
     }
     setActiveIndex(newActive);
+    emit countChanged();
 }
 
 void WorkspaceModel::setActiveIndex(int index)
@@ -107,6 +109,10 @@ Compositor::Compositor(QQuickWindow *window)
     connect(m_xdgShell, &QWaylandXdgShell::toplevelCreated,
             this, &Compositor::onToplevelCreated);
 
+    // Re-tile when the number of windows changes.
+    connect(&m_workspaceModel, &WorkspaceModel::countChanged,
+            this, &Compositor::reconfigureTiles);
+
     create();
 }
 
@@ -116,11 +122,33 @@ void Compositor::setClientArea(int width, int height)
     if (newSize == m_clientArea)
         return;
     m_clientArea = newSize;
+    reconfigureTiles();
+}
 
-    // Re-send configure to every live toplevel so clients resize to match.
-    for (int i = 0; i < m_workspaceModel.count(); ++i) {
-        if (auto *tl = m_workspaceModel.toplevelAt(i))
-            tl->sendConfigure(m_clientArea, QList<QWaylandXdgToplevel::State>());
+void Compositor::reconfigureTiles()
+{
+    const int n = m_workspaceModel.count();
+    if (n == 0 || m_clientArea.isEmpty())
+        return;
+
+    const int cols = qMin(n, 2);
+    const int rows = (n + cols - 1) / cols;
+
+    for (int i = 0; i < n; ++i) {
+        auto *tl = m_workspaceModel.toplevelAt(i);
+        if (!tl)
+            continue;
+
+        const int row = i / cols;
+        const int col = i % cols;
+        // Items in the last row may span wider if the row is not full.
+        const int itemsInRow = (row == rows - 1) ? (n - row * cols) : cols;
+        const int tileW = m_clientArea.width() / itemsInRow;
+        const int tileH = m_clientArea.height() / rows;
+
+        Q_UNUSED(col);
+        tl->sendConfigure(QSize(tileW, tileH),
+                          QList<QWaylandXdgToplevel::State>());
     }
 }
 
@@ -143,12 +171,16 @@ bool Compositor::eventFilter(QObject *obj, QEvent *event)
 void Compositor::onToplevelCreated(QWaylandXdgToplevel *toplevel,
                                    QWaylandXdgSurface *xdgSurface)
 {
-    // Initial configure uses the current client-area size. If QML hasn't
-    // reported one yet (m_clientArea is still {0,0}) the client will just
-    // pick its own size; the next setClientArea() call will correct it.
-    toplevel->sendConfigure(m_clientArea, QList<QWaylandXdgToplevel::State>());
-
+    // Add first, then reconfigureTiles (triggered by countChanged) sends
+    // each toplevel a configure with the correct per-tile size.
     m_workspaceModel.addWorkspace(xdgSurface, toplevel);
+
+    // If QML hasn't reported a client area yet, reconfigureTiles() is a
+    // no-op.  The xdg-shell protocol still requires an initial configure,
+    // so send one with {0,0} — the client picks its own size until the
+    // first setClientArea() call corrects it.
+    if (m_clientArea.isEmpty())
+        toplevel->sendConfigure(QSize(0, 0), QList<QWaylandXdgToplevel::State>());
 
     // Clean up when the surface is destroyed.
     connect(xdgSurface->surface(), &QWaylandSurface::surfaceDestroyed,

@@ -14,6 +14,8 @@ qt_add_executable(botnik
     src/ollamaclient.h src/ollamaclient.cpp
     src/toolhost.h src/toolhost.cpp
     src/applauncher.h src/applauncher.cpp
+    src/stdinreader.h src/stdinreader.cpp
+    src/headlesscompositor.h src/headlesscompositor.cpp
 )
 
 target_link_libraries(botnik PRIVATE

@@ -7,6 +7,7 @@
 struct ChatMessage {
     QString role;    // "user" or "assistant"
     QString content;
+    QString toolLog; // tool-call status lines (display-only, excluded from model history)
 };
 
 class ChatModel : public QAbstractListModel {
@@ -27,6 +28,7 @@ public:
     Q_INVOKABLE void addUserMessage(const QString &text);
     void addAssistantMessage();
     void appendToLastMessage(const QString &token);
+    void appendToolLog(const QString &text);
     const QVector<ChatMessage> &messages() const { return m_messages; }
 
 signals:

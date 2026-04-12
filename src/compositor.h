@@ -16,6 +16,7 @@ struct Workspace {
 class WorkspaceModel : public QAbstractListModel {
     Q_OBJECT
     Q_PROPERTY(int activeIndex READ activeIndex NOTIFY activeIndexChanged)
+    Q_PROPERTY(int count READ count NOTIFY countChanged)
 
 public:
     enum Roles { XdgSurfaceRole = Qt::UserRole + 1, SurfaceIdRole };
@@ -41,6 +42,7 @@ public:
 
 signals:
     void activeIndexChanged();
+    void countChanged();
 
 private:
     QList<Workspace> m_workspaces;
@@ -67,6 +69,7 @@ protected:
 private slots:
     void onToplevelCreated(QWaylandXdgToplevel *toplevel,
                            QWaylandXdgSurface *xdgSurface);
+    void reconfigureTiles();
 
 private:
     QQuickWindow *m_window = nullptr;

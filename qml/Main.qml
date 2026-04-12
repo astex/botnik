@@ -14,7 +14,7 @@ Rectangle {
         anchors.margins: 16
         spacing: 12
 
-        // Left: workspace area (gets majority of screen)
+        // Left: workspace area (tiled surfaces)
         Item {
             id: workspaceArea
             Layout.fillWidth: true
@@ -36,10 +36,22 @@ Rectangle {
                 model: workspaceModel
 
                 ShellSurfaceItem {
-                    anchors.fill: parent
                     shellSurface: model.xdgSurface
                     autoCreatePopupItems: false
-                    visible: index === workspaceModel.activeIndex
+
+                    // Tiling geometry
+                    readonly property int totalCount: workspaceModel.count
+                    readonly property int cols: Math.min(totalCount, 2)
+                    readonly property int rows: Math.ceil(totalCount / cols)
+                    readonly property int row: Math.floor(index / cols)
+                    readonly property int col: index % cols
+                    // Last row may have fewer items — stretch to fill
+                    readonly property int itemsInRow: (row === rows - 1) ? (totalCount - row * cols) : cols
+
+                    x: col * (workspaceArea.width / itemsInRow)
+                    y: row * (workspaceArea.height / rows)
+                    width: workspaceArea.width / itemsInRow
+                    height: workspaceArea.height / rows
                 }
             }
         }

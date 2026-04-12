@@ -1,6 +1,4 @@
 #include <QGuiApplication>
-#include <QJsonArray>
-#include <QJsonObject>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QQmlContext>
@@ -14,6 +12,7 @@
 #include "ollamaclient.h"
 #include "stdinreader.h"
 #include "toolhost.h"
+#include "windowtools.h"
 
 namespace {
 
@@ -56,8 +55,17 @@ static void removeHeadlessArg(int &argc, char *argv[])
 static int runHeadless(QGuiApplication &app)
 {
     ChatModel chatModel;
-    OllamaClient ollama(&chatModel);
     HeadlessCompositor compositor;
+
+    AppLauncher appLauncher(compositor.socketName());
+    ToolHost toolHost;
+
+    for (auto &spec : appLauncher.toolSpecs())
+        toolHost.registerTool(std::move(spec));
+    for (auto &spec : windowToolSpecs(compositor.workspaceModel()))
+        toolHost.registerTool(std::move(spec));
+
+    OllamaClient ollama(&chatModel, &toolHost);
 
     StdinReader stdinReader(&chatModel);
 
@@ -73,11 +81,13 @@ static int runHeadless(QGuiApplication &app)
     clock->setProcessEnvironment(env);
     clock->start();
 
-    QObject::connect(&app, &QCoreApplication::aboutToQuit, &app, [clock]() {
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &app,
+                     [clock, &appLauncher]() {
         if (clock->state() != QProcess::NotRunning) {
             clock->kill();
             clock->waitForFinished(500);
         }
+        appLauncher.shutdown();
     });
 
     return app.exec();
@@ -95,53 +105,10 @@ static int runGui(QGuiApplication &app)
     AppLauncher appLauncher(compositor.socketName());
     ToolHost toolHost;
 
-    // launch_app: ask the compositor to start a known app in its own window.
-    {
-        ToolHost::ToolSpec spec;
-        spec.name = QStringLiteral("launch_app");
-        spec.description = QStringLiteral(
-            "Launch a desktop application in its own window.");
-        QJsonObject nameProp;
-        nameProp[QStringLiteral("type")] = QStringLiteral("string");
-        nameProp[QStringLiteral("description")] = QStringLiteral(
-            "Short app name. Currently supported: clock.");
-        QJsonArray nameEnum;
-        for (const QString &n : appLauncher.appNames())
-            nameEnum.append(n);
-        nameProp[QStringLiteral("enum")] = nameEnum;
-
-        QJsonObject properties;
-        properties[QStringLiteral("name")] = nameProp;
-
-        QJsonObject parameters;
-        parameters[QStringLiteral("type")] = QStringLiteral("object");
-        parameters[QStringLiteral("properties")] = properties;
-        QJsonArray required;
-        required.append(QStringLiteral("name"));
-        parameters[QStringLiteral("required")] = required;
-
-        spec.parameters = parameters;
-        spec.handler = [&appLauncher](const QJsonObject &args,
-                                      QString *error) -> QJsonValue {
-            const QString name = args.value(QStringLiteral("name")).toString();
-            if (name.isEmpty()) {
-                if (error)
-                    *error = QStringLiteral("missing required arg: name");
-                return {};
-            }
-            QString err;
-            if (!appLauncher.launch(name, &err)) {
-                if (error)
-                    *error = err;
-                return {};
-            }
-            QJsonObject ok;
-            ok[QStringLiteral("ok")] = true;
-            ok[QStringLiteral("launched")] = name;
-            return ok;
-        };
+    for (auto &spec : appLauncher.toolSpecs())
         toolHost.registerTool(std::move(spec));
-    }
+    for (auto &spec : windowToolSpecs(compositor.workspaceModel()))
+        toolHost.registerTool(std::move(spec));
 
     OllamaClient ollama(&chatModel, &toolHost);
 

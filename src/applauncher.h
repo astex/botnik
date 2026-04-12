@@ -1,5 +1,7 @@
 #pragma once
 
+#include "toolhost.h"
+
 #include <QHash>
 #include <QObject>
 #include <QString>
@@ -25,6 +27,9 @@ public:
 
     // Names of the apps this launcher knows how to start.
     QStringList appNames() const;
+
+    // Returns ToolSpecs for the launch_app tool.
+    QList<ToolHost::ToolSpec> toolSpecs();
 
     // Synchronously kill all still-running child processes. Called from the
     // app's aboutToQuit hook in main.cpp.

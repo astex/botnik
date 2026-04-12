@@ -8,6 +8,7 @@
 #include <QQuickWindow>
 
 struct Workspace {
+    int id = 0;
     QWaylandXdgSurface *surface = nullptr;
     QWaylandXdgToplevel *toplevel = nullptr;
 };
@@ -17,7 +18,7 @@ class WorkspaceModel : public QAbstractListModel {
     Q_PROPERTY(int activeIndex READ activeIndex NOTIFY activeIndexChanged)
 
 public:
-    enum Roles { XdgSurfaceRole = Qt::UserRole + 1 };
+    enum Roles { XdgSurfaceRole = Qt::UserRole + 1, SurfaceIdRole };
 
     explicit WorkspaceModel(QObject *parent = nullptr);
 
@@ -28,19 +29,23 @@ public:
     int activeIndex() const { return m_activeIndex; }
 
     int count() const { return m_workspaces.size(); }
+    const Workspace &workspaceAt(int row) const { return m_workspaces.at(row); }
     QWaylandXdgToplevel *toplevelAt(int row) const;
+
+    // Find the list index for a given stable ID. Returns -1 if not found.
+    int findById(int id) const;
 
     void addWorkspace(QWaylandXdgSurface *surface, QWaylandXdgToplevel *toplevel);
     void removeBySurface(QWaylandXdgSurface *surface);
+    void setActiveIndex(int index);
 
 signals:
     void activeIndexChanged();
 
 private:
-    void setActiveIndex(int index);
-
     QList<Workspace> m_workspaces;
     int m_activeIndex = -1;
+    int m_nextId = 1;
 };
 
 class Compositor : public QWaylandCompositor {

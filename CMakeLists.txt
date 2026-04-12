@@ -16,6 +16,7 @@ qt_add_executable(botnik
     src/applauncher.h src/applauncher.cpp
     src/stdinreader.h src/stdinreader.cpp
     src/headlesscompositor.h src/headlesscompositor.cpp
+    src/windowtools.h src/windowtools.cpp
 )
 
 target_link_libraries(botnik PRIVATE

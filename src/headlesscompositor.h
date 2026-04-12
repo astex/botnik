@@ -10,7 +10,8 @@ class HeadlessCompositor : public QWaylandCompositor {
     Q_OBJECT
 
 public:
-    explicit HeadlessCompositor(QObject *parent = nullptr);
+    explicit HeadlessCompositor(const QString &socketName = QString(),
+                               QObject *parent = nullptr);
 
 private slots:
     void onToplevelCreated(QWaylandXdgToplevel *toplevel,

@@ -1,10 +1,14 @@
 #include "headlesscompositor.h"
 
-HeadlessCompositor::HeadlessCompositor(QObject *parent)
+HeadlessCompositor::HeadlessCompositor(const QString &socketName,
+                                       QObject *parent)
     : QWaylandCompositor(parent)
 {
     // Disable hardware integration — no EGL display in offscreen mode.
     setUseHardwareIntegrationExtension(false);
+
+    if (!socketName.isEmpty())
+        setSocketName(socketName.toLocal8Bit());
 
     // No QWaylandOutput — nothing to render to.
     m_xdgShell = new QWaylandXdgShell(this);

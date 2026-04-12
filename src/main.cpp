@@ -42,20 +42,48 @@ static bool isHeadless(int argc, char *argv[])
     return qEnvironmentVariableIsSet("BOTNIK_HEADLESS");
 }
 
-static void removeHeadlessArg(int &argc, char *argv[])
+static QString parseSocketName(int argc, char *argv[])
+{
+    for (int i = 1; i < argc - 1; ++i) {
+        if (qstrcmp(argv[i], "--socket-name") == 0)
+            return QString::fromLocal8Bit(argv[i + 1]);
+    }
+    return {};
+}
+
+static void removeCustomArgs(int &argc, char *argv[])
 {
     int dst = 1;
     for (int src = 1; src < argc; ++src) {
-        if (qstrcmp(argv[src], "--headless") != 0)
-            argv[dst++] = argv[src];
+        if (qstrcmp(argv[src], "--headless") == 0)
+            continue;
+        if (qstrcmp(argv[src], "--socket-name") == 0) {
+            ++src; // skip the value too
+            continue;
+        }
+        argv[dst++] = argv[src];
     }
     argc = dst;
 }
 
-static int runHeadless(QGuiApplication &app)
+static bool s_suppressEgl = false;
+static QtMessageHandler s_defaultHandler = nullptr;
+
+static void headlessMessageHandler(QtMsgType type, const QMessageLogContext &ctx,
+                                   const QString &msg)
+{
+    if (s_suppressEgl && type == QtWarningMsg
+        && msg.contains(QStringLiteral("Failed to initialize EGL"))) {
+        return;
+    }
+    if (s_defaultHandler)
+        s_defaultHandler(type, ctx, msg);
+}
+
+static int runHeadless(QGuiApplication &app, const QString &socketName)
 {
     ChatModel chatModel;
-    HeadlessCompositor compositor;
+    HeadlessCompositor compositor(socketName);
 
     AppLauncher appLauncher(compositor.socketName());
     ToolHost toolHost;
@@ -150,16 +178,19 @@ static int runGui(QGuiApplication &app)
 int main(int argc, char *argv[])
 {
     bool headless = isHeadless(argc, argv);
+    QString socketName = parseSocketName(argc, argv);
 
     if (headless) {
         qputenv("QT_QPA_PLATFORM", "offscreen");
-        removeHeadlessArg(argc, argv);
+        s_suppressEgl = true;
+        s_defaultHandler = qInstallMessageHandler(headlessMessageHandler);
+        removeCustomArgs(argc, argv);
     }
 
     QGuiApplication app(argc, argv);
 
     if (headless)
-        return runHeadless(app);
+        return runHeadless(app, socketName);
     else
         return runGui(app);
 }

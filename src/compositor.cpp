@@ -1,49 +1,91 @@
 #include "compositor.h"
 #include <QWaylandSurface>
 
-// --- SurfaceModel ---
+// --- WorkspaceModel ---
 
-SurfaceModel::SurfaceModel(QObject *parent)
+WorkspaceModel::WorkspaceModel(QObject *parent)
     : QAbstractListModel(parent)
 {
 }
 
-int SurfaceModel::rowCount(const QModelIndex &parent) const
+int WorkspaceModel::rowCount(const QModelIndex &parent) const
 {
-    return parent.isValid() ? 0 : m_surfaces.size();
+    return parent.isValid() ? 0 : m_workspaces.size();
 }
 
-QVariant SurfaceModel::data(const QModelIndex &index, int role) const
+QVariant WorkspaceModel::data(const QModelIndex &index, int role) const
 {
-    if (!index.isValid() || index.row() >= m_surfaces.size())
+    if (!index.isValid() || index.row() >= m_workspaces.size())
         return {};
 
     if (role == XdgSurfaceRole)
-        return QVariant::fromValue(m_surfaces.at(index.row()));
+        return QVariant::fromValue(m_workspaces.at(index.row()).surface);
 
     return {};
 }
 
-QHash<int, QByteArray> SurfaceModel::roleNames() const
+QHash<int, QByteArray> WorkspaceModel::roleNames() const
 {
     return {{XdgSurfaceRole, "xdgSurface"}};
 }
 
-void SurfaceModel::addSurface(QWaylandXdgSurface *surface)
+QWaylandXdgToplevel *WorkspaceModel::toplevelAt(int row) const
 {
-    beginInsertRows(QModelIndex(), m_surfaces.size(), m_surfaces.size());
-    m_surfaces.append(surface);
-    endInsertRows();
+    if (row < 0 || row >= m_workspaces.size())
+        return nullptr;
+    return m_workspaces.at(row).toplevel;
 }
 
-void SurfaceModel::removeSurface(QWaylandXdgSurface *surface)
+void WorkspaceModel::addWorkspace(QWaylandXdgSurface *surface,
+                                  QWaylandXdgToplevel *toplevel)
 {
-    int idx = m_surfaces.indexOf(surface);
+    beginInsertRows(QModelIndex(), m_workspaces.size(), m_workspaces.size());
+    m_workspaces.append({surface, toplevel});
+    endInsertRows();
+
+    // Newest wins.
+    setActiveIndex(m_workspaces.size() - 1);
+}
+
+void WorkspaceModel::removeBySurface(QWaylandXdgSurface *surface)
+{
+    int idx = -1;
+    for (int i = 0; i < m_workspaces.size(); ++i) {
+        if (m_workspaces.at(i).surface == surface) {
+            idx = i;
+            break;
+        }
+    }
     if (idx < 0)
         return;
+
     beginRemoveRows(QModelIndex(), idx, idx);
-    m_surfaces.removeAt(idx);
+    m_workspaces.removeAt(idx);
     endRemoveRows();
+
+    // Fix up activeIndex:
+    //  - if the removed row was active, fall back to the new last row (next-newest alive);
+    //    if the list is empty, -1.
+    //  - if the removed row was before the active one, decrement to keep pointing at
+    //    the same workspace.
+    //  - otherwise leave activeIndex alone.
+    int newActive = m_activeIndex;
+    if (m_workspaces.isEmpty()) {
+        newActive = -1;
+    } else if (idx == m_activeIndex) {
+        newActive = m_workspaces.size() - 1;
+    } else if (idx < m_activeIndex) {
+        newActive = m_activeIndex - 1;
+    }
+    setActiveIndex(newActive);
+}
+
+void WorkspaceModel::setActiveIndex(int index)
+{
+    if (index == m_activeIndex)
+        return;
+    m_activeIndex = index;
+    emit activeIndexChanged();
 }
 
 // --- Compositor ---
@@ -64,17 +106,33 @@ Compositor::Compositor(QQuickWindow *window)
     create();
 }
 
+void Compositor::setClientArea(int width, int height)
+{
+    QSize newSize(width, height);
+    if (newSize == m_clientArea)
+        return;
+    m_clientArea = newSize;
+
+    // Re-send configure to every live toplevel so clients resize to match.
+    for (int i = 0; i < m_workspaceModel.count(); ++i) {
+        if (auto *tl = m_workspaceModel.toplevelAt(i))
+            tl->sendConfigure(m_clientArea, QList<QWaylandXdgToplevel::State>());
+    }
+}
+
 void Compositor::onToplevelCreated(QWaylandXdgToplevel *toplevel,
                                    QWaylandXdgSurface *xdgSurface)
 {
-    // Send initial configure so the client knows the compositor accepted it.
-    toplevel->sendConfigure({300, 40}, QList<QWaylandXdgToplevel::State>());
+    // Initial configure uses the current client-area size. If QML hasn't
+    // reported one yet (m_clientArea is still {0,0}) the client will just
+    // pick its own size; the next setClientArea() call will correct it.
+    toplevel->sendConfigure(m_clientArea, QList<QWaylandXdgToplevel::State>());
 
-    m_surfaceModel.addSurface(xdgSurface);
+    m_workspaceModel.addWorkspace(xdgSurface, toplevel);
 
     // Clean up when the surface is destroyed.
     connect(xdgSurface->surface(), &QWaylandSurface::surfaceDestroyed,
             this, [this, xdgSurface]() {
-                m_surfaceModel.removeSurface(xdgSurface);
+                m_workspaceModel.removeBySurface(xdgSurface);
             });
 }

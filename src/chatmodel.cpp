@@ -21,7 +21,7 @@ QVariant ChatModel::data(const QModelIndex &index, int role) const
     case RoleRole:
         return msg.role;
     case ContentRole:
-        return msg.content;
+        return msg.content + msg.toolLog;
     default:
         return {};
     }
@@ -56,6 +56,16 @@ void ChatModel::appendToLastMessage(const QString &token)
         return;
 
     m_messages.last().content += token;
+    QModelIndex idx = index(m_messages.size() - 1);
+    emit dataChanged(idx, idx, {ContentRole});
+}
+
+void ChatModel::appendToolLog(const QString &text)
+{
+    if (m_messages.isEmpty())
+        return;
+
+    m_messages.last().toolLog += text;
     QModelIndex idx = index(m_messages.size() - 1);
     emit dataChanged(idx, idx, {ContentRole});
 }

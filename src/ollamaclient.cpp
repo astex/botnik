@@ -227,14 +227,14 @@ void OllamaClient::handleToolCallsAndContinue()
 
         const QString argsJson = QString::fromUtf8(
             QJsonDocument(args).toJson(QJsonDocument::Compact));
-        m_chatModel->appendToLastMessage(
+        m_chatModel->appendToolLog(
             QStringLiteral("\n[tool %1 %2]").arg(name, argsJson));
 
         QJsonValue result;
         QString resultString;
         if (!m_tools) {
             resultString = QStringLiteral("{\"error\":\"no tool host\"}");
-            m_chatModel->appendToLastMessage(
+            m_chatModel->appendToolLog(
                 QStringLiteral("\n[\u2192 err: no tool host]"));
         } else {
             QString err;
@@ -244,11 +244,11 @@ void OllamaClient::handleToolCallsAndContinue()
                 obj[QStringLiteral("error")] = err;
                 resultString = QString::fromUtf8(
                     QJsonDocument(obj).toJson(QJsonDocument::Compact));
-                m_chatModel->appendToLastMessage(
+                m_chatModel->appendToolLog(
                     QStringLiteral("\n[\u2192 err: %1]").arg(err));
             } else {
                 resultString = compactJson(result);
-                m_chatModel->appendToLastMessage(
+                m_chatModel->appendToolLog(
                     QStringLiteral("\n[\u2192 ok]"));
             }
         }
@@ -266,7 +266,7 @@ void OllamaClient::handleToolCallsAndContinue()
     ++m_toolRounds;
 
     if (m_toolRounds >= kMaxToolRounds) {
-        m_chatModel->appendToLastMessage(
+        m_chatModel->appendToolLog(
             QStringLiteral("\n[tool loop bound reached, stopping]"));
         return;
     }

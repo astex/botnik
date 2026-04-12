@@ -12,6 +12,8 @@ qt_add_executable(botnik
     src/compositor.h src/compositor.cpp
     src/chatmodel.h src/chatmodel.cpp
     src/ollamaclient.h src/ollamaclient.cpp
+    src/toolhost.h src/toolhost.cpp
+    src/applauncher.h src/applauncher.cpp
 )
 
 target_link_libraries(botnik PRIVATE

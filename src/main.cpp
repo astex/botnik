@@ -1,13 +1,17 @@
 #include <QGuiApplication>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QQmlContext>
 #include <QQuickView>
 #include <QTimer>
 
-#include "compositor.h"
+#include "applauncher.h"
 #include "chatmodel.h"
+#include "compositor.h"
 #include "ollamaclient.h"
+#include "toolhost.h"
 
 namespace {
 
@@ -37,8 +41,60 @@ int main(int argc, char *argv[])
     view.resize(1024, 768);
 
     ChatModel chatModel;
-    OllamaClient ollama(&chatModel);
     Compositor compositor(&view);
+
+    AppLauncher appLauncher(compositor.socketName());
+    ToolHost toolHost;
+
+    // launch_app: ask the compositor to start a known app in its own window.
+    {
+        ToolHost::ToolSpec spec;
+        spec.name = QStringLiteral("launch_app");
+        spec.description = QStringLiteral(
+            "Launch a desktop application in its own window.");
+        QJsonObject nameProp;
+        nameProp[QStringLiteral("type")] = QStringLiteral("string");
+        nameProp[QStringLiteral("description")] = QStringLiteral(
+            "Short app name. Currently supported: clock.");
+        QJsonArray nameEnum;
+        for (const QString &n : appLauncher.appNames())
+            nameEnum.append(n);
+        nameProp[QStringLiteral("enum")] = nameEnum;
+
+        QJsonObject properties;
+        properties[QStringLiteral("name")] = nameProp;
+
+        QJsonObject parameters;
+        parameters[QStringLiteral("type")] = QStringLiteral("object");
+        parameters[QStringLiteral("properties")] = properties;
+        QJsonArray required;
+        required.append(QStringLiteral("name"));
+        parameters[QStringLiteral("required")] = required;
+
+        spec.parameters = parameters;
+        spec.handler = [&appLauncher](const QJsonObject &args,
+                                      QString *error) -> QJsonValue {
+            const QString name = args.value(QStringLiteral("name")).toString();
+            if (name.isEmpty()) {
+                if (error)
+                    *error = QStringLiteral("missing required arg: name");
+                return {};
+            }
+            QString err;
+            if (!appLauncher.launch(name, &err)) {
+                if (error)
+                    *error = err;
+                return {};
+            }
+            QJsonObject ok;
+            ok[QStringLiteral("ok")] = true;
+            ok[QStringLiteral("launched")] = name;
+            return ok;
+        };
+        toolHost.registerTool(std::move(spec));
+    }
+
+    OllamaClient ollama(&chatModel, &toolHost);
 
     view.rootContext()->setContextProperty(QStringLiteral("chatModel"), &chatModel);
     view.rootContext()->setContextProperty(QStringLiteral("workspaceModel"),
@@ -62,13 +118,14 @@ int main(int argc, char *argv[])
     }
 
     QObject::connect(&app, &QCoreApplication::aboutToQuit, &app,
-                     [&clock, &extraClock]() {
+                     [&clock, &extraClock, &appLauncher]() {
         for (QProcess *p : {clock, extraClock}) {
             if (p && p->state() != QProcess::NotRunning) {
                 p->kill();
                 p->waitForFinished(500);
             }
         }
+        appLauncher.shutdown();
     });
 
     return app.exec();

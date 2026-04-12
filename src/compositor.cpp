@@ -21,13 +21,16 @@ QVariant WorkspaceModel::data(const QModelIndex &index, int role) const
 
     if (role == XdgSurfaceRole)
         return QVariant::fromValue(m_workspaces.at(index.row()).surface);
+    if (role == SurfaceIdRole)
+        return m_workspaces.at(index.row()).id;
 
     return {};
 }
 
 QHash<int, QByteArray> WorkspaceModel::roleNames() const
 {
-    return {{XdgSurfaceRole, "xdgSurface"}};
+    return {{XdgSurfaceRole, "xdgSurface"},
+            {SurfaceIdRole, "surfaceId"}};
 }
 
 QWaylandXdgToplevel *WorkspaceModel::toplevelAt(int row) const
@@ -37,11 +40,20 @@ QWaylandXdgToplevel *WorkspaceModel::toplevelAt(int row) const
     return m_workspaces.at(row).toplevel;
 }
 
+int WorkspaceModel::findById(int id) const
+{
+    for (int i = 0; i < m_workspaces.size(); ++i) {
+        if (m_workspaces.at(i).id == id)
+            return i;
+    }
+    return -1;
+}
+
 void WorkspaceModel::addWorkspace(QWaylandXdgSurface *surface,
                                   QWaylandXdgToplevel *toplevel)
 {
     beginInsertRows(QModelIndex(), m_workspaces.size(), m_workspaces.size());
-    m_workspaces.append({surface, toplevel});
+    m_workspaces.append({m_nextId++, surface, toplevel});
     endInsertRows();
 
     // Newest wins.

@@ -1,4 +1,5 @@
 #include "headlesscompositor.h"
+#include <QWaylandSurface>
 
 HeadlessCompositor::HeadlessCompositor(QObject *parent)
     : QWaylandCompositor(parent)
@@ -18,5 +19,11 @@ void HeadlessCompositor::onToplevelCreated(QWaylandXdgToplevel *toplevel,
                                            QWaylandXdgSurface *xdgSurface)
 {
     toplevel->sendConfigure({0, 0}, QList<QWaylandXdgToplevel::State>());
-    Q_UNUSED(xdgSurface);
+
+    m_workspaceModel.addWorkspace(xdgSurface, toplevel);
+
+    connect(xdgSurface->surface(), &QWaylandSurface::surfaceDestroyed,
+            this, [this, xdgSurface]() {
+                m_workspaceModel.removeBySurface(xdgSurface);
+            });
 }

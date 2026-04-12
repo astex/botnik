@@ -1,5 +1,5 @@
 #include "compositor.h"
-#include <QKeyEvent>
+#include <QWaylandSeat>
 #include <QWaylandSurface>
 
 // --- WorkspaceModel ---
@@ -19,15 +19,28 @@ QVariant WorkspaceModel::data(const QModelIndex &index, int role) const
     if (!index.isValid() || index.row() >= m_workspaces.size())
         return {};
 
-    if (role == XdgSurfaceRole)
-        return QVariant::fromValue(m_workspaces.at(index.row()).surface);
+    const auto &ws = m_workspaces.at(index.row());
 
-    return {};
+    switch (role) {
+    case XdgSurfaceRole:
+        return QVariant::fromValue(ws.surface);
+    case TitleRole: {
+        QString title = ws.toplevel ? ws.toplevel->title() : QString();
+        if (title.isEmpty())
+            title = QStringLiteral("Window %1").arg(index.row() + 1);
+        return title;
+    }
+    default:
+        return {};
+    }
 }
 
 QHash<int, QByteArray> WorkspaceModel::roleNames() const
 {
-    return {{XdgSurfaceRole, "xdgSurface"}};
+    return {
+        {XdgSurfaceRole, "xdgSurface"},
+        {TitleRole, "title"},
+    };
 }
 
 QWaylandXdgToplevel *WorkspaceModel::toplevelAt(int row) const
@@ -43,6 +56,18 @@ void WorkspaceModel::addWorkspace(QWaylandXdgSurface *surface,
     beginInsertRows(QModelIndex(), m_workspaces.size(), m_workspaces.size());
     m_workspaces.append({surface, toplevel});
     endInsertRows();
+
+    // Update title when the client sets it.
+    if (toplevel) {
+        int row = m_workspaces.size() - 1;
+        connect(toplevel, &QWaylandXdgToplevel::titleChanged, this,
+                [this, row]() {
+                    if (row < m_workspaces.size()) {
+                        QModelIndex idx = index(row);
+                        emit dataChanged(idx, idx, {TitleRole});
+                    }
+                });
+    }
 
     // Newest wins.
     setActiveIndex(m_workspaces.size() - 1);
@@ -81,6 +106,12 @@ void WorkspaceModel::removeBySurface(QWaylandXdgSurface *surface)
     setActiveIndex(newActive);
 }
 
+void WorkspaceModel::activateWorkspace(int index)
+{
+    if (index >= 0 && index < m_workspaces.size())
+        setActiveIndex(index);
+}
+
 void WorkspaceModel::setActiveIndex(int index)
 {
     if (index == m_activeIndex)
@@ -89,14 +120,78 @@ void WorkspaceModel::setActiveIndex(int index)
     emit activeIndexChanged();
 }
 
+// --- CompositorKeyboard ---
+
+CompositorKeyboard::CompositorKeyboard(Compositor *compositor, QWaylandSeat *seat)
+    : QWaylandKeyboard(seat)
+    , m_compositor(compositor)
+{
+    // Defer scan-code lookup until after the keyboard is fully initialized
+    // (XKB keymap must be loaded first).
+    QMetaObject::invokeMethod(this, &CompositorKeyboard::buildScanCodeMap,
+                              Qt::QueuedConnection);
+}
+
+void CompositorKeyboard::buildScanCodeMap()
+{
+    m_metaLeftCode = keyToScanCode(Qt::Key_Super_L);
+    m_metaRightCode = keyToScanCode(Qt::Key_Super_R);
+
+    // Meta+Space -> focus chat
+    uint spaceCode = keyToScanCode(Qt::Key_Space);
+    if (spaceCode)
+        m_hotkeyMap.insert(spaceCode, HotkeyFocusChat);
+
+    // Meta+1..9 -> workspace switching
+    for (int n = 1; n <= 9; ++n) {
+        uint code = keyToScanCode(Qt::Key_0 + n);
+        if (code)
+            m_hotkeyMap.insert(code, HotkeyWorkspace1 + n - 1);
+    }
+}
+
+void CompositorKeyboard::sendKeyPressEvent(uint code)
+{
+    // Track Meta modifier.
+    if (code == m_metaLeftCode || code == m_metaRightCode) {
+        m_metaHeld = true;
+        QWaylandKeyboard::sendKeyPressEvent(code);
+        return;
+    }
+
+    if (m_metaHeld) {
+        auto it = m_hotkeyMap.find(code);
+        if (it != m_hotkeyMap.end()) {
+            int id = it.value();
+            if (id == HotkeyFocusChat) {
+                emit m_compositor->hotkeyFocusChat();
+            } else {
+                // HotkeyWorkspace1..9 -> index 0..8
+                int wsIndex = id - HotkeyWorkspace1;
+                emit m_compositor->hotkeyActivateWorkspace(wsIndex);
+            }
+            return; // Consume — don't forward to client.
+        }
+    }
+
+    QWaylandKeyboard::sendKeyPressEvent(code);
+}
+
+void CompositorKeyboard::sendKeyReleaseEvent(uint code)
+{
+    if (code == m_metaLeftCode || code == m_metaRightCode) {
+        m_metaHeld = false;
+    }
+
+    QWaylandKeyboard::sendKeyReleaseEvent(code);
+}
+
 // --- Compositor ---
 
 Compositor::Compositor(QQuickWindow *window)
     : QWaylandCompositor()
     , m_window(window)
 {
-    window->installEventFilter(this);
-
     m_output = new QWaylandOutput(this, window);
 
     QWaylandOutputMode mode(window->size(), 60000);
@@ -108,6 +203,11 @@ Compositor::Compositor(QQuickWindow *window)
             this, &Compositor::onToplevelCreated);
 
     create();
+}
+
+QWaylandKeyboard *Compositor::createKeyboardDevice(QWaylandSeat *seat)
+{
+    return new CompositorKeyboard(this, seat);
 }
 
 void Compositor::setClientArea(int width, int height)
@@ -122,22 +222,6 @@ void Compositor::setClientArea(int width, int height)
         if (auto *tl = m_workspaceModel.toplevelAt(i))
             tl->sendConfigure(m_clientArea, QList<QWaylandXdgToplevel::State>());
     }
-}
-
-bool Compositor::eventFilter(QObject *obj, QEvent *event)
-{
-    if (event->type() == QEvent::KeyPress) {
-        auto *ke = static_cast<QKeyEvent *>(event);
-        if (ke->modifiers() & Qt::MetaModifier) {
-            switch (ke->key()) {
-            case Qt::Key_Space:
-                emit hotkeyFocusChat();
-                return true;
-            // Future Meta+<key> hotkeys go here.
-            }
-        }
-    }
-    return QWaylandCompositor::eventFilter(obj, event);
 }
 
 void Compositor::onToplevelCreated(QWaylandXdgToplevel *toplevel,

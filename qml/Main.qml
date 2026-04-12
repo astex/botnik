@@ -14,32 +14,79 @@ Rectangle {
         anchors.margins: 16
         spacing: 12
 
-        // Left: workspace area (gets majority of screen)
-        Item {
-            id: workspaceArea
+        // Left: workspace area with tab bar (gets majority of screen)
+        ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
             visible: root.hasActiveWorkspace
+            spacing: 0
 
-            onWidthChanged: reportSize()
-            onHeightChanged: reportSize()
-            onVisibleChanged: reportSize()
+            // Tab bar
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 32
+                color: "#073642"
+                radius: 4
 
-            function reportSize() {
-                if (visible && width > 0 && height > 0) {
-                    compositor.setClientArea(Math.round(width), Math.round(height));
+                ListView {
+                    id: tabBar
+                    anchors.fill: parent
+                    anchors.margins: 2
+                    orientation: ListView.Horizontal
+                    model: workspaceModel
+                    spacing: 4
+                    clip: true
+
+                    delegate: Rectangle {
+                        width: tabLabel.implicitWidth + 24
+                        height: tabBar.height
+                        color: index === workspaceModel.activeIndex ? "#2aa198" : "#002b36"
+                        radius: 3
+
+                        Text {
+                            id: tabLabel
+                            anchors.centerIn: parent
+                            text: model.title
+                            color: index === workspaceModel.activeIndex ? "#002b36" : "#839496"
+                            font.family: "monospace"
+                            font.pixelSize: 12
+                            elide: Text.ElideRight
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: workspaceModel.activateWorkspace(index)
+                        }
+                    }
                 }
             }
 
-            Repeater {
-                id: workspaceRepeater
-                model: workspaceModel
+            // Workspace surface area
+            Item {
+                id: workspaceArea
+                Layout.fillWidth: true
+                Layout.fillHeight: true
 
-                ShellSurfaceItem {
-                    anchors.fill: parent
-                    shellSurface: model.xdgSurface
-                    autoCreatePopupItems: false
-                    visible: index === workspaceModel.activeIndex
+                onWidthChanged: reportSize()
+                onHeightChanged: reportSize()
+                onVisibleChanged: reportSize()
+
+                function reportSize() {
+                    if (visible && width > 0 && height > 0) {
+                        compositor.setClientArea(Math.round(width), Math.round(height));
+                    }
+                }
+
+                Repeater {
+                    id: workspaceRepeater
+                    model: workspaceModel
+
+                    ShellSurfaceItem {
+                        anchors.fill: parent
+                        shellSurface: model.xdgSurface
+                        autoCreatePopupItems: false
+                        visible: index === workspaceModel.activeIndex
+                    }
                 }
             }
         }
@@ -125,6 +172,9 @@ Rectangle {
         target: compositor
         function onHotkeyFocusChat() {
             input.forceActiveFocus();
+        }
+        function onHotkeyActivateWorkspace(index) {
+            workspaceModel.activateWorkspace(index);
         }
     }
 }

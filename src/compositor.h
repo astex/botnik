@@ -1,11 +1,15 @@
 #pragma once
 
 #include <QAbstractListModel>
+#include <QHash>
 #include <QSize>
 #include <QWaylandCompositor>
+#include <QWaylandKeyboard>
 #include <QWaylandOutput>
 #include <QWaylandXdgShell>
 #include <QQuickWindow>
+
+class Compositor;
 
 struct Workspace {
     QWaylandXdgSurface *surface = nullptr;
@@ -14,10 +18,10 @@ struct Workspace {
 
 class WorkspaceModel : public QAbstractListModel {
     Q_OBJECT
-    Q_PROPERTY(int activeIndex READ activeIndex NOTIFY activeIndexChanged)
+    Q_PROPERTY(int activeIndex READ activeIndex WRITE activateWorkspace NOTIFY activeIndexChanged)
 
 public:
-    enum Roles { XdgSurfaceRole = Qt::UserRole + 1 };
+    enum Roles { XdgSurfaceRole = Qt::UserRole + 1, TitleRole };
 
     explicit WorkspaceModel(QObject *parent = nullptr);
 
@@ -33,6 +37,8 @@ public:
     void addWorkspace(QWaylandXdgSurface *surface, QWaylandXdgToplevel *toplevel);
     void removeBySurface(QWaylandXdgSurface *surface);
 
+    Q_INVOKABLE void activateWorkspace(int index);
+
 signals:
     void activeIndexChanged();
 
@@ -41,6 +47,30 @@ private:
 
     QList<Workspace> m_workspaces;
     int m_activeIndex = -1;
+};
+
+class CompositorKeyboard : public QWaylandKeyboard {
+    Q_OBJECT
+
+public:
+    explicit CompositorKeyboard(Compositor *compositor, QWaylandSeat *seat);
+
+    void sendKeyPressEvent(uint code) override;
+    void sendKeyReleaseEvent(uint code) override;
+
+private:
+    void buildScanCodeMap();
+
+    Compositor *m_compositor;
+    uint m_metaLeftCode = 0;
+    uint m_metaRightCode = 0;
+    QHash<uint, int> m_hotkeyMap; // scan code -> hotkey ID
+    bool m_metaHeld = false;
+
+    // Hotkey IDs
+    static constexpr int HotkeyFocusChat = 0;
+    static constexpr int HotkeyWorkspace1 = 1;
+    // 2..9 follow sequentially
 };
 
 class Compositor : public QWaylandCompositor {
@@ -55,9 +85,10 @@ public:
 
 signals:
     void hotkeyFocusChat();
+    void hotkeyActivateWorkspace(int index);
 
 protected:
-    bool eventFilter(QObject *obj, QEvent *event) override;
+    QWaylandKeyboard *createKeyboardDevice(QWaylandSeat *seat) override;
 
 private slots:
     void onToplevelCreated(QWaylandXdgToplevel *toplevel,

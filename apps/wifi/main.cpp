@@ -139,7 +139,7 @@ public:
     WifiWindow()
     {
         setFlags(Qt::FramelessWindowHint);
-        resize(150, 40);
+        resize(40, 40);
         setTitle(QStringLiteral("botnik-wifi"));
 
         auto *timer = new QTimer(this);
@@ -171,12 +171,11 @@ protected:
                 filledArcs = 1;
         }
 
-        // Draw WiFi icon in the left portion of the window.
-        // Icon is centered in a 36x36 area with 2px left margin.
-        const int iconSize = 30;
-        const int iconLeft = 4;
+        // Draw WiFi icon centered in the 40x40 square.
+        const int iconSize = 36;
+        const int iconLeft = 2;
         const int iconCenterX = iconLeft + iconSize / 2;
-        const int iconBottom = height() - 6;
+        const int iconBottom = height() - 4;
 
         // Draw the base dot.
         const int dotRadius = 3;
@@ -189,7 +188,7 @@ protected:
         // We draw arcs from 45 degrees to 135 degrees (a 90-degree span).
         const int startAngle = 45 * 16;
         const int spanAngle = 90 * 16;
-        const int arcRadii[] = {10, 17, 24};
+        const int arcRadii[] = {12, 20, 28};
 
         for (int i = 0; i < 3; ++i) {
             int r = arcRadii[i];
@@ -214,15 +213,6 @@ protected:
                        iconCenterX + xSize, xCenterY - xSize);
         }
 
-        // Draw SSID text to the right of the icon.
-        p.setPen(teal);
-        p.setFont(QFont("monospace", 10));
-        QString label = disconnected
-            ? QStringLiteral("No WiFi")
-            : (info.ssid.isEmpty() ? QStringLiteral("(unknown)") : info.ssid);
-        int textLeft = iconLeft + iconSize + 6;
-        QRect textRect(textLeft, 0, width() - textLeft - 2, height());
-        p.drawText(textRect, Qt::AlignVCenter | Qt::AlignLeft, label);
     }
 };
 

@@ -9,6 +9,10 @@ Rectangle {
 
     readonly property bool hasActiveWorkspace: workspaceModel.activeIndex >= 0 && (workspaceModel.count - workspaceModel.pinnedCount) > 0
 
+    WaylandMouseTracker {
+        anchors.fill: parent
+        windowSystemCursorEnabled: true
+
     RowLayout {
         anchors.fill: parent
         anchors.margins: 16
@@ -100,15 +104,34 @@ Rectangle {
                         id: workspaceRepeater
                         model: workspaceModel
 
-                        ShellSurfaceItem {
-                            shellSurface: model.xdgSurface
-                            autoCreatePopupItems: false
+                        Item {
                             visible: !model.pinned && index === workspaceModel.activeIndex
+                            anchors.fill: parent
 
-                            x: 0
-                            y: 0
-                            width: workspaceArea.width
-                            height: workspaceArea.height
+                            ShellSurfaceItem {
+                                id: surfaceItem
+                                shellSurface: model.xdgSurface
+                                autoCreatePopupItems: false
+                                inputEventsEnabled: false
+                                anchors.fill: parent
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                z: 1
+                                onPressed: function(mouse) {
+                                    compositor.forwardMousePress(
+                                        surfaceItem, mouse.x, mouse.y, mouse.button)
+                                }
+                                onReleased: function(mouse) {
+                                    compositor.forwardMouseRelease(mouse.button)
+                                }
+                                onPositionChanged: function(mouse) {
+                                    compositor.forwardMouseMove(
+                                        surfaceItem, mouse.x, mouse.y)
+                                }
+                            }
                         }
                     }
                 }
@@ -222,6 +245,7 @@ Rectangle {
                                 }
 
                                 ShellSurfaceItem {
+                                    id: pinnedSurfaceItem
                                     shellSurface: model.xdgSurface
                                     autoCreatePopupItems: false
                                     anchors.fill: parent
@@ -232,6 +256,7 @@ Rectangle {
                 }
             }
         }
+    } // WaylandMouseTracker
 
     Connections {
         target: compositor

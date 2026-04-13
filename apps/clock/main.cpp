@@ -5,6 +5,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
+#include <QFileSystemWatcher>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QStandardPaths>
@@ -38,6 +39,21 @@ public:
         resize(300, 40);
         setTitle(QStringLiteral("botnik-clock"));
 
+        m_clockFormat = readClockFormat();
+
+        m_watcher = new QFileSystemWatcher(this);
+        QString path = QDir::homePath()
+                       + QStringLiteral("/.config/botnik/settings.json");
+        m_watcher->addPath(path);
+        connect(m_watcher, &QFileSystemWatcher::fileChanged,
+                this, [this, path]() {
+            m_clockFormat = readClockFormat();
+            // Re-add: some systems remove the watch after a change.
+            if (!m_watcher->files().contains(path))
+                m_watcher->addPath(path);
+            update();
+        });
+
         auto *timer = new QTimer(this);
         connect(timer, &QTimer::timeout, this, [this]() { update(); });
         timer->start(1000);
@@ -52,12 +68,16 @@ protected:
         p.setPen(QColor("#2aa198"));
         p.setFont(QFont("monospace", 14));
 
-        QString fmt = (readClockFormat() == QStringLiteral("12h"))
+        QString fmt = (m_clockFormat == QStringLiteral("12h"))
                           ? QStringLiteral("h:mm AP")
                           : QStringLiteral("HH:mm");
         QString time = QDateTime::currentDateTime().toString(fmt);
         p.drawText(QRect(0, 0, width(), height()), Qt::AlignCenter, time);
     }
+
+private:
+    QFileSystemWatcher *m_watcher = nullptr;
+    QString m_clockFormat;
 };
 
 int main(int argc, char *argv[])

@@ -25,6 +25,33 @@ When running nested inside an existing X11 session:
 QT_QPA_PLATFORM=xcb ./build/botnik
 ```
 
+## Headless mode
+
+Run botnik without a GUI window using the `--headless` flag or `BOTNIK_HEADLESS=1` environment variable:
+
+```sh
+./build/botnik --headless
+```
+
+In headless mode, the compositor runs against Qt's offscreen platform. Chat interaction happens via stdin/stdout: type a message on stdin (one line per message), and the assistant's response streams to stdout. Sending EOF (Ctrl-D or closing the pipe) triggers a clean exit.
+
+## Testing
+
+A headless test script verifies the build and basic functionality:
+
+```sh
+bash scripts/test-headless.sh
+```
+
+Exit code 0 means all tests passed. The script:
+
+1. Builds botnik (`cmake -B build && cmake --build build`)
+2. Tests startup and clean shutdown via EOF
+3. Tests that the process stays alive while stdin is open
+4. If Ollama is reachable, sends a chat message and verifies a response arrives
+
+Tests that require Ollama are skipped (not failed) when Ollama is not running.
+
 ## Architecture
 
 - **Compositor** (`src/compositor.*`) — Minimal `QWaylandCompositor` subclass. Owns the display output.

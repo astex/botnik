@@ -12,6 +12,11 @@ qt_add_executable(botnik
     src/compositor.h src/compositor.cpp
     src/chatmodel.h src/chatmodel.cpp
     src/ollamaclient.h src/ollamaclient.cpp
+    src/toolhost.h src/toolhost.cpp
+    src/applauncher.h src/applauncher.cpp
+    src/stdinreader.h src/stdinreader.cpp
+    src/headlesscompositor.h src/headlesscompositor.cpp
+    src/windowtools.h src/windowtools.cpp
 )
 
 target_link_libraries(botnik PRIVATE
@@ -29,3 +34,4 @@ qt_add_resources(botnik "qml"
 )
 
 add_subdirectory(apps/clock)
+add_subdirectory(apps/config)

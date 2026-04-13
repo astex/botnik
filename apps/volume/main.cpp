@@ -1,5 +1,6 @@
 #include <QGuiApplication>
 #include <QPainter>
+#include <QPainterPath>
 #include <QProcess>
 #include <QRasterWindow>
 #include <QTimer>
@@ -9,7 +10,7 @@ public:
     VolumeWindow()
     {
         setFlags(Qt::FramelessWindowHint);
-        resize(300, 40);
+        resize(100, 40);
         setTitle(QStringLiteral("botnik-volume"));
 
         readVolume();
@@ -26,14 +27,71 @@ protected:
     void paintEvent(QPaintEvent *) override
     {
         QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
         p.fillRect(0, 0, width(), height(), QColor("#002b36"));
 
-        p.setPen(QColor("#2aa198"));
-        p.setFont(QFont("monospace", 14));
+        const QColor teal("#2aa198");
+        const int h = height();
+        const int iconSize = h - 8;
+        const int iconX = 4;
+        const int iconY = 4;
 
-        QString text = m_muted ? QStringLiteral("MUTE")
-                               : QStringLiteral("VOL %1%").arg(m_volume);
-        p.drawText(QRect(0, 0, width(), height()), Qt::AlignCenter, text);
+        // Speaker body: rectangle + triangle forming a speaker shape.
+        // Body rect on the left, flare (trapezoid) opening to the right.
+        const int bodyW = iconSize / 3;
+        const int bodyH = iconSize / 2;
+        const int bodyX = iconX;
+        const int bodyY = iconY + (iconSize - bodyH) / 2;
+
+        const int flareW = iconSize / 3;
+        const int flareX = bodyX + bodyW;
+
+        QPainterPath speakerPath;
+        // Rectangle part (back of speaker)
+        speakerPath.moveTo(bodyX, bodyY);
+        speakerPath.lineTo(bodyX + bodyW, bodyY);
+        // Flare top
+        speakerPath.lineTo(flareX + flareW, iconY);
+        // Flare bottom
+        speakerPath.lineTo(flareX + flareW, iconY + iconSize);
+        // Back to rectangle bottom
+        speakerPath.lineTo(bodyX + bodyW, bodyY + bodyH);
+        speakerPath.lineTo(bodyX, bodyY + bodyH);
+        speakerPath.closeSubpath();
+
+        p.setPen(Qt::NoPen);
+        p.setBrush(teal);
+        p.drawPath(speakerPath);
+
+        const int waveX = flareX + flareW + 4;
+        const int waveCY = iconY + iconSize / 2;
+
+        if (m_muted) {
+            // Draw X over speaker
+            p.setPen(QPen(teal, 2));
+            const int xOff = waveX + 2;
+            const int xSize = 8;
+            p.drawLine(xOff, waveCY - xSize / 2, xOff + xSize, waveCY + xSize / 2);
+            p.drawLine(xOff, waveCY + xSize / 2, xOff + xSize, waveCY - xSize / 2);
+        } else {
+            // Draw sound wave arcs based on volume level
+            int arcs = m_volume <= 33 ? 1 : (m_volume <= 66 ? 2 : 3);
+            p.setPen(QPen(teal, 1.5));
+            p.setBrush(Qt::NoBrush);
+            for (int i = 0; i < arcs; ++i) {
+                int r = 5 + i * 5;
+                QRect arcRect(waveX - r, waveCY - r, r * 2, r * 2);
+                p.drawArc(arcRect, -45 * 16, 90 * 16);
+            }
+        }
+
+        // Percentage text to the right of the icon
+        p.setPen(teal);
+        p.setFont(QFont("monospace", 10));
+        const int textX = waveX + 20;
+        QString pctText = m_muted ? QStringLiteral("M")
+                                  : QStringLiteral("%1%").arg(m_volume);
+        p.drawText(QRect(textX, 0, width() - textX, h), Qt::AlignVCenter, pctText);
     }
 
 private:

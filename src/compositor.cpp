@@ -32,6 +32,8 @@ QVariant WorkspaceModel::data(const QModelIndex &index, int role) const
             title = QStringLiteral("Window %1").arg(index.row() + 1);
         return title;
     }
+    case PinnedRole:
+        return m_pinnedIds.contains(ws.id);
     default:
         return {};
     }
@@ -43,6 +45,7 @@ QHash<int, QByteArray> WorkspaceModel::roleNames() const
         {XdgSurfaceRole, "xdgSurface"},
         {SurfaceIdRole, "surfaceId"},
         {TitleRole, "title"},
+        {PinnedRole, "pinned"},
     };
 }
 
@@ -98,9 +101,14 @@ void WorkspaceModel::removeBySurface(QWaylandXdgSurface *surface)
     if (idx < 0)
         return;
 
+    bool wasPinned = m_pinnedIds.remove(m_workspaces.at(idx).id);
+
     beginRemoveRows(QModelIndex(), idx, idx);
     m_workspaces.removeAt(idx);
     endRemoveRows();
+
+    if (wasPinned)
+        emit pinnedCountChanged();
 
     // Fix up activeIndex:
     //  - if the removed row was active, fall back to the new last row (next-newest alive);
@@ -134,6 +142,113 @@ void WorkspaceModel::setActiveIndex(int index)
     emit activeIndexChanged();
 }
 
+// --- Pinning ---
+
+bool WorkspaceModel::pinToSidebar(int id)
+{
+    int idx = findById(id);
+    if (idx < 0 || m_pinnedIds.contains(id))
+        return false;
+
+    m_pinnedIds.insert(id);
+    QModelIndex mi = index(idx);
+    emit dataChanged(mi, mi, {PinnedRole});
+    emit pinnedCountChanged();
+
+    // If the pinned surface was active, switch to nearest unpinned.
+    if (idx == m_activeIndex)
+        switchToNearestUnpinned(idx);
+
+    return true;
+}
+
+bool WorkspaceModel::unpinFromSidebar(int id)
+{
+    int idx = findById(id);
+    if (idx < 0 || !m_pinnedIds.contains(id))
+        return false;
+
+    m_pinnedIds.remove(id);
+    QModelIndex mi = index(idx);
+    emit dataChanged(mi, mi, {PinnedRole});
+    emit pinnedCountChanged();
+    return true;
+}
+
+bool WorkspaceModel::isPinned(int id) const
+{
+    return m_pinnedIds.contains(id);
+}
+
+int WorkspaceModel::unpinnedCount() const
+{
+    int count = 0;
+    for (const auto &ws : m_workspaces) {
+        if (!m_pinnedIds.contains(ws.id))
+            ++count;
+    }
+    return count;
+}
+
+int WorkspaceModel::nthUnpinnedIndex(int n) const
+{
+    int seen = 0;
+    for (int i = 0; i < m_workspaces.size(); ++i) {
+        if (!m_pinnedIds.contains(m_workspaces.at(i).id)) {
+            if (seen == n)
+                return i;
+            ++seen;
+        }
+    }
+    return -1;
+}
+
+int WorkspaceModel::unpinnedPositionOf(int row) const
+{
+    if (row < 0 || row >= m_workspaces.size())
+        return -1;
+    if (m_pinnedIds.contains(m_workspaces.at(row).id))
+        return -1;
+    int pos = 0;
+    for (int i = 0; i < row; ++i) {
+        if (!m_pinnedIds.contains(m_workspaces.at(i).id))
+            ++pos;
+    }
+    return pos;
+}
+
+int WorkspaceModel::nextUnpinnedIndex(int fromRow, int direction) const
+{
+    const int n = m_workspaces.size();
+    if (n == 0)
+        return -1;
+    for (int step = 1; step < n; ++step) {
+        int candidate = (fromRow + (step * direction) % n + n) % n;
+        if (!m_pinnedIds.contains(m_workspaces.at(candidate).id))
+            return candidate;
+    }
+    return -1;
+}
+
+void WorkspaceModel::switchToNearestUnpinned(int fromRow)
+{
+    // Prefer the one after, fall back to before, then -1.
+    const int n = m_workspaces.size();
+    for (int i = fromRow + 1; i < n; ++i) {
+        if (!m_pinnedIds.contains(m_workspaces.at(i).id)) {
+            setActiveIndex(i);
+            return;
+        }
+    }
+    for (int i = fromRow - 1; i >= 0; --i) {
+        if (!m_pinnedIds.contains(m_workspaces.at(i).id)) {
+            setActiveIndex(i);
+            return;
+        }
+    }
+    setActiveIndex(-1);
+}
+
 // --- CompositorKeyboard ---
 
 CompositorKeyboard::CompositorKeyboard(Compositor *compositor, QWaylandSeat *seat)
@@ -150,6 +265,8 @@ void CompositorKeyboard::buildScanCodeMap()
 {
     m_metaLeftCode = keyToScanCode(Qt::Key_Super_L);
     m_metaRightCode = keyToScanCode(Qt::Key_Super_R);
+    m_shiftLeftCode = keyToScanCode(Qt::Key_Shift);
+    m_shiftRightCode = keyToScanCode(Qt::Key_Shift); // same code for both
 
     // Meta+Space -> focus chat
     uint spaceCode = keyToScanCode(Qt::Key_Space);
@@ -162,6 +279,11 @@ void CompositorKeyboard::buildScanCodeMap()
         if (code)
             m_hotkeyMap.insert(code, HotkeyWorkspace1 + n - 1);
     }
+
+    // Meta+Tab -> cycle workspaces (direction depends on Shift)
+    uint tabCode = keyToScanCode(Qt::Key_Tab);
+    if (tabCode)
+        m_hotkeyMap.insert(tabCode, HotkeyTabForward);
 }
 
 void CompositorKeyboard::sendKeyPressEvent(uint code)
@@ -173,17 +295,28 @@ void CompositorKeyboard::sendKeyPressEvent(uint code)
         return;
     }
 
+    // Track Shift modifier.
+    if (code == m_shiftLeftCode || code == m_shiftRightCode) {
+        m_shiftHeld = true;
+        QWaylandKeyboard::sendKeyPressEvent(code);
+        return;
+    }
+
     if (m_metaHeld) {
         auto it = m_hotkeyMap.find(code);
         if (it != m_hotkeyMap.end()) {
             int id = it.value();
             if (id == HotkeyFocusChat) {
                 emit m_compositor->hotkeyFocusChat();
+            } else if (id == HotkeyTabForward) {
+                int direction = m_shiftHeld ? -1 : 1;
+                emit m_compositor->hotkeyCycleWorkspace(direction);
             } else {
-                // HotkeyWorkspace1..9 -> index 0..8
+                // HotkeyWorkspace1..9 -> 0-based unpinned position
                 int wsIndex = id - HotkeyWorkspace1;
                 emit m_compositor->hotkeyActivateWorkspace(wsIndex);
             }
+            m_consumedKeys.insert(code); // Suppress release
             return; // Consume — don't forward to client.
         }
     }
@@ -196,6 +329,13 @@ void CompositorKeyboard::sendKeyReleaseEvent(uint code)
     if (code == m_metaLeftCode || code == m_metaRightCode) {
         m_metaHeld = false;
     }
+    if (code == m_shiftLeftCode || code == m_shiftRightCode) {
+        m_shiftHeld = false;
+    }
+
+    // Suppress release for keys we consumed on press.
+    if (m_consumedKeys.remove(code))
+        return;
 
     QWaylandKeyboard::sendKeyReleaseEvent(code);
 }
@@ -243,25 +383,28 @@ void Compositor::reconfigureTiles()
     if (n == 0 || m_clientArea.isEmpty())
         return;
 
-    const int cols = qMin(n, 2);
-    const int rows = (n + cols - 1) / cols;
-
+    // Virtual-desktop mode: every unpinned surface gets the full client area.
     for (int i = 0; i < n; ++i) {
         auto *tl = m_workspaceModel.toplevelAt(i);
         if (!tl)
             continue;
-
-        const int row = i / cols;
-        const int col = i % cols;
-        // Items in the last row may span wider if the row is not full.
-        const int itemsInRow = (row == rows - 1) ? (n - row * cols) : cols;
-        const int tileW = m_clientArea.width() / itemsInRow;
-        const int tileH = m_clientArea.height() / rows;
-
-        Q_UNUSED(col);
-        tl->sendConfigure(QSize(tileW, tileH),
+        const auto &ws = m_workspaceModel.workspaceAt(i);
+        if (m_workspaceModel.isPinned(ws.id))
+            continue; // Pinned surfaces get their own configure.
+        tl->sendConfigure(m_clientArea,
                           QList<QWaylandXdgToplevel::State>());
     }
+}
+
+void Compositor::sendPinnedConfigure(int id, int width, int height)
+{
+    int idx = m_workspaceModel.findById(id);
+    if (idx < 0)
+        return;
+    auto *tl = m_workspaceModel.toplevelAt(idx);
+    if (tl)
+        tl->sendConfigure(QSize(width, height),
+                          QList<QWaylandXdgToplevel::State>());
 }
 
 void Compositor::onToplevelCreated(QWaylandXdgToplevel *toplevel,

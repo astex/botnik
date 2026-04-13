@@ -3,6 +3,32 @@
 #include <QRasterWindow>
 #include <QTimer>
 #include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QStandardPaths>
+
+static QString readClockFormat()
+{
+    QString path = QDir::homePath()
+                   + QStringLiteral("/.config/botnik/settings.json");
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly))
+        return QStringLiteral("24h");
+
+    QJsonParseError err;
+    QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
+    if (err.error != QJsonParseError::NoError || !doc.isObject())
+        return QStringLiteral("24h");
+
+    QString fmt = doc.object()
+                      .value(QStringLiteral("clock_format"))
+                      .toString();
+    if (fmt == QStringLiteral("12h"))
+        return fmt;
+    return QStringLiteral("24h");
+}
 
 class ClockWindow : public QRasterWindow {
 public:
@@ -26,8 +52,10 @@ protected:
         p.setPen(QColor("#2aa198"));
         p.setFont(QFont("monospace", 14));
 
-        QString time = QDateTime::currentDateTime()
-                           .toString(QStringLiteral("yyyy-MM-dd hh:mm AP"));
+        QString fmt = (readClockFormat() == QStringLiteral("12h"))
+                          ? QStringLiteral("h:mm AP")
+                          : QStringLiteral("HH:mm");
+        QString time = QDateTime::currentDateTime().toString(fmt);
         p.drawText(QRect(0, 0, width(), height()), Qt::AlignCenter, time);
     }
 };

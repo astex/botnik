@@ -35,7 +35,7 @@ public:
     ClockWindow()
     {
         setFlags(Qt::FramelessWindowHint);
-        resize(300, 40);
+        resize(300, 58);
         setTitle(QStringLiteral("botnik-clock"));
 
         auto *timer = new QTimer(this);
@@ -49,14 +49,30 @@ protected:
         QPainter p(this);
         p.fillRect(0, 0, width(), height(), QColor("#002b36"));
 
+        QDateTime now = QDateTime::currentDateTime();
+
+        // Time line — larger sans-serif font
+        QFont timeFont(QStringLiteral("Noto Sans"));
+        timeFont.setStyleHint(QFont::SansSerif);
+        timeFont.setPointSize(20);
+        p.setFont(timeFont);
         p.setPen(QColor("#2aa198"));
-        p.setFont(QFont("monospace", 14));
 
         QString fmt = (readClockFormat() == QStringLiteral("12h"))
                           ? QStringLiteral("h:mm AP")
                           : QStringLiteral("HH:mm");
-        QString time = QDateTime::currentDateTime().toString(fmt);
-        p.drawText(QRect(0, 0, width(), height()), Qt::AlignCenter, time);
+        QString time = now.toString(fmt);
+        p.drawText(QRect(0, 2, width(), 34), Qt::AlignCenter, time);
+
+        // Date line — smaller, dimmer
+        QFont dateFont(QStringLiteral("Noto Sans"));
+        dateFont.setStyleHint(QFont::SansSerif);
+        dateFont.setPointSize(10);
+        p.setFont(dateFont);
+        p.setPen(QColor("#468e85"));
+
+        QString date = now.toString(QStringLiteral("ddd MMM d"));
+        p.drawText(QRect(0, 34, width(), 22), Qt::AlignCenter, date);
     }
 };
 

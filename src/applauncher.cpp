@@ -14,6 +14,7 @@ AppLauncher::AppLauncher(const QString &waylandSocket, QObject *parent)
     // Hardcoded app map. The clock is the only one the gen 1 test relies on.
     m_apps.insert(QStringLiteral("clock"), QStringLiteral("botnik-clock"));
     m_apps.insert(QStringLiteral("config"), QStringLiteral("botnik-config"));
+    m_apps.insert(QStringLiteral("battery"), QStringLiteral("botnik-battery"));
 }
 
 bool AppLauncher::launch(const QString &name, QString *error)

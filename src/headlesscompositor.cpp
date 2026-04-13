@@ -30,7 +30,8 @@ void HeadlessCompositor::onToplevelCreated(QWaylandXdgToplevel *toplevel,
     if (toplevel) {
         int wsId = m_workspaceModel.workspaceAt(m_workspaceModel.count() - 1).id;
         auto tryAutoPin = [this, toplevel, wsId]() {
-            if (toplevel->title() == QStringLiteral("botnik-clock"))
+            if (toplevel->title() == QStringLiteral("botnik-clock") ||
+                toplevel->title() == QStringLiteral("botnik-battery"))
                 m_workspaceModel.pinToSidebar(wsId);
         };
         tryAutoPin();

@@ -45,7 +45,7 @@ public:
     BatteryWindow()
     {
         setFlags(Qt::FramelessWindowHint);
-        resize(120, 40);
+        resize(40, 40);
         setTitle(QStringLiteral("botnik-battery"));
 
         auto *timer = new QTimer(this);
@@ -64,16 +64,23 @@ protected:
         const QColor teal("#2aa198");
 
         if (bat.percent < 0) {
-            p.setPen(teal);
-            p.setFont(QFont("monospace", 12));
-            p.drawText(QRect(0, 0, width(), height()), Qt::AlignCenter, QStringLiteral("NO BAT"));
+            // Draw empty battery outline with "?" for no-battery state
+            const int bodyW = 28, bodyH = 14;
+            const int nubW = 4, nubH = 8;
+            const int bodyX = 4, bodyY = (height() - bodyH) / 2;
+            p.setPen(QPen(teal, 2));
+            p.setBrush(Qt::NoBrush);
+            p.drawRoundedRect(bodyX, bodyY, bodyW, bodyH, 2, 2);
+            p.fillRect(bodyX + bodyW, bodyY + (bodyH - nubH) / 2, nubW, nubH, teal);
+            p.setFont(QFont("monospace", 10));
+            p.drawText(QRect(bodyX, bodyY, bodyW, bodyH), Qt::AlignCenter, QStringLiteral("?"));
             return;
         }
 
-        // Battery body: horizontal rectangle with nub on right
-        const int bodyW = 36, bodyH = 18;
+        // Battery body: scaled to fill 40×40 square
+        const int bodyW = 28, bodyH = 14;
         const int nubW = 4, nubH = 8;
-        const int bodyX = 8, bodyY = (height() - bodyH) / 2;
+        const int bodyX = 4, bodyY = (height() - bodyH) / 2;
 
         // Outline
         p.setPen(QPen(teal, 2));
@@ -115,12 +122,6 @@ protected:
             p.drawPolygon(bolt);
         }
 
-        // Percentage text to the right of the icon
-        p.setPen(teal);
-        p.setFont(QFont("monospace", 12));
-        int textX = bodyX + bodyW + nubW + 6;
-        p.drawText(QRect(textX, 0, width() - textX, height()), Qt::AlignVCenter | Qt::AlignLeft,
-                   QStringLiteral("%1%").arg(bat.percent));
     }
 };
 

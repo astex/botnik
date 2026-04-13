@@ -508,7 +508,7 @@ void Compositor::onToplevelCreated(QWaylandXdgToplevel *toplevel,
     if (toplevel) {
         int wsId = m_workspaceModel.workspaceAt(m_workspaceModel.count() - 1).id;
         auto tryAutoPin = [this, toplevel, wsId]() {
-            if (toplevel->title() == QStringLiteral("botnik-clock"))
+            if (toplevel->title().startsWith(QStringLiteral("botnik-")))
                 m_workspaceModel.pinToSidebar(wsId);
         };
         tryAutoPin(); // Title may already be set.

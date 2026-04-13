@@ -231,7 +231,7 @@ Rectangle {
 
                             Item {
                                 visible: model.pinned
-                                width: visible ? 200 : 0
+                                width: visible ? pinnedSurfaceItem.implicitWidth || 200 : 0
                                 height: visible ? 40 : 0
 
                                 onWidthChanged: sendPinnedSize()

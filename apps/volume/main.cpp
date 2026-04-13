@@ -10,7 +10,7 @@ public:
     VolumeWindow()
     {
         setFlags(Qt::FramelessWindowHint);
-        resize(100, 40);
+        resize(40, 40);
         setTitle(QStringLiteral("botnik-volume"));
 
         readVolume();
@@ -31,10 +31,9 @@ protected:
         p.fillRect(0, 0, width(), height(), QColor("#002b36"));
 
         const QColor teal("#2aa198");
-        const int h = height();
-        const int iconSize = h - 8;
+        const int iconSize = 36;
         const int iconX = 4;
-        const int iconY = 4;
+        const int iconY = 2;
 
         // Speaker body: rectangle + triangle forming a speaker shape.
         // Body rect on the left, flare (trapezoid) opening to the right.
@@ -69,8 +68,8 @@ protected:
         if (m_muted) {
             // Draw X over speaker
             p.setPen(QPen(teal, 2));
-            const int xOff = waveX + 2;
-            const int xSize = 8;
+            const int xOff = waveX;
+            const int xSize = 7;
             p.drawLine(xOff, waveCY - xSize / 2, xOff + xSize, waveCY + xSize / 2);
             p.drawLine(xOff, waveCY + xSize / 2, xOff + xSize, waveCY - xSize / 2);
         } else {
@@ -79,19 +78,12 @@ protected:
             p.setPen(QPen(teal, 1.5));
             p.setBrush(Qt::NoBrush);
             for (int i = 0; i < arcs; ++i) {
-                int r = 5 + i * 5;
+                int r = 4 + i * 3;
                 QRect arcRect(waveX - r, waveCY - r, r * 2, r * 2);
                 p.drawArc(arcRect, -45 * 16, 90 * 16);
             }
         }
 
-        // Percentage text to the right of the icon
-        p.setPen(teal);
-        p.setFont(QFont("monospace", 10));
-        const int textX = waveX + 20;
-        QString pctText = m_muted ? QStringLiteral("M")
-                                  : QStringLiteral("%1%").arg(m_volume);
-        p.drawText(QRect(textX, 0, width() - textX, h), Qt::AlignVCenter, pctText);
     }
 
 private:

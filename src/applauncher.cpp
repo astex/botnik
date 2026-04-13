@@ -13,6 +13,7 @@ AppLauncher::AppLauncher(const QString &waylandSocket, QObject *parent)
 {
     // Hardcoded app map. The clock is the only one the gen 1 test relies on.
     m_apps.insert(QStringLiteral("clock"), QStringLiteral("botnik-clock"));
+    m_apps.insert(QStringLiteral("config"), QStringLiteral("botnik-config"));
 }
 
 bool AppLauncher::launch(const QString &name, QString *error)
@@ -86,7 +87,7 @@ QList<ToolHost::ToolSpec> AppLauncher::toolSpecs()
     QJsonObject nameProp;
     nameProp[QStringLiteral("type")] = QStringLiteral("string");
     nameProp[QStringLiteral("description")] = QStringLiteral(
-        "Short app name. Currently supported: clock.");
+        "Short app name. Currently supported: clock, config.");
     QJsonArray nameEnum;
     for (const QString &n : appNames())
         nameEnum.append(n);

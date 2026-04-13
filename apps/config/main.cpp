@@ -37,6 +37,7 @@ static void writeSettings(const QJsonObject &obj)
     if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
         return;
     f.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
+    f.close();
 }
 
 static QString currentClockFormat()
@@ -84,17 +85,16 @@ int main(int argc, char *argv[])
     auto *label = new QLabel;
     auto *button = new QPushButton;
 
-    auto updateUI = [label, button]() {
-        QString fmt = currentClockFormat();
+    auto updateUI = [label, button](const QString &fmt) {
         label->setText(QStringLiteral("Current: ") + fmt);
         QString other = (fmt == QStringLiteral("12h"))
                             ? QStringLiteral("24h")
                             : QStringLiteral("12h");
         button->setText(QStringLiteral("Switch to ") + other);
     };
-    updateUI();
+    updateUI(currentClockFormat());
 
-    QObject::connect(button, &QPushButton::clicked, [updateUI]() {
+    QObject::connect(button, &QPushButton::clicked, [label, button, updateUI]() {
         QJsonObject obj = readSettings();
         QString current = obj.value(QStringLiteral("clock_format"))
                               .toString(QStringLiteral("24h"));
@@ -103,7 +103,7 @@ int main(int argc, char *argv[])
                            : QStringLiteral("12h");
         obj[QStringLiteral("clock_format")] = next;
         writeSettings(obj);
-        updateUI();
+        updateUI(next);
     });
 
     row->addWidget(label);

@@ -1,6 +1,11 @@
 #include "compositor.h"
+#include <QDebug>
+#include <QTimer>
 #include <QWaylandSeat>
 #include <QWaylandSurface>
+#include <QWaylandView>
+#include <QWaylandPointer>
+#include <wayland-server-protocol.h>
 
 // --- WorkspaceModel ---
 
@@ -361,6 +366,23 @@ Compositor::Compositor(QQuickWindow *window)
     connect(m_xdgShell, &QWaylandXdgShell::toplevelCreated,
             this, &Compositor::onToplevelCreated);
 
+    // Send frame callbacks so clients know they can commit the next buffer.
+    // Must call frameStarted() before sendFrameCallbacks() — without it,
+    // Qt considers no frame rendered and won't dispatch the callbacks.
+    auto *frameTimer = new QTimer(this);
+    frameTimer->setInterval(16);
+    connect(frameTimer, &QTimer::timeout, this, [this]() {
+        for (int i = 0; i < m_workspaceModel.count(); ++i) {
+            auto *ws = &m_workspaceModel.workspaceAt(i);
+            if (ws->surface && ws->surface->surface()) {
+                auto *s = ws->surface->surface();
+                s->frameStarted();
+                s->sendFrameCallbacks();
+            }
+        }
+    });
+    frameTimer->start();
+
     // Re-tile when the number of windows changes.
     connect(&m_workspaceModel, &WorkspaceModel::countChanged,
             this, &Compositor::reconfigureTiles);
@@ -380,6 +402,69 @@ void Compositor::setClientArea(int width, int height)
         return;
     m_clientArea = newSize;
     reconfigureTiles();
+}
+
+static void sendPointerFrame(QWaylandSeat *seat)
+{
+    auto *pointer = seat->pointer();
+    if (!pointer)
+        return;
+    struct wl_resource *res = pointer->focusResource();
+    if (res)
+        wl_pointer_send_frame(res);
+}
+
+static QWaylandView *viewForItem(QWaylandQuickItem *item)
+{
+    QWaylandView *v = item->view();
+    if (v)
+        return v;
+    // Fallback: find any view for this surface on any output.
+    auto *surface = item->surface();
+    if (!surface)
+        return nullptr;
+    const auto views = surface->views();
+    return views.isEmpty() ? nullptr : views.first();
+}
+
+void Compositor::forwardMousePress(QWaylandQuickItem *item,
+                                   qreal localX, qreal localY,
+                                   int button)
+{
+    if (!item || !item->surface())
+        return;
+    auto *view = viewForItem(item);
+    if (!view) {
+        qWarning() << "forwardMousePress: no view for surface";
+        return;
+    }
+    auto *seat = defaultSeat();
+    QPointF surfacePos = item->mapToSurface(QPointF(localX, localY));
+    seat->sendMouseMoveEvent(view, surfacePos);
+    sendPointerFrame(seat);
+    seat->sendMousePressEvent(Qt::MouseButton(button));
+    sendPointerFrame(seat);
+}
+
+void Compositor::forwardMouseRelease(int button)
+{
+    auto *seat = defaultSeat();
+    seat->sendMouseReleaseEvent(Qt::MouseButton(button));
+    sendPointerFrame(seat);
+}
+
+void Compositor::forwardMouseMove(QWaylandQuickItem *item,
+                                  qreal localX, qreal localY)
+{
+    if (!item || !item->surface())
+        return;
+    auto *view = viewForItem(item);
+    if (!view)
+        return;
+    auto *seat = defaultSeat();
+    QPointF surfacePos = item->mapToSurface(QPointF(localX, localY));
+    seat->sendMouseMoveEvent(view, surfacePos);
+    sendPointerFrame(seat);
 }
 
 void Compositor::reconfigureTiles()
@@ -437,6 +522,13 @@ void Compositor::onToplevelCreated(QWaylandXdgToplevel *toplevel,
     // first setClientArea() call corrects it.
     if (m_clientArea.isEmpty())
         toplevel->sendConfigure(QSize(0, 0), QList<QWaylandXdgToplevel::State>());
+
+    // Re-render the compositor window when a client commits a new buffer.
+    auto *surf = xdgSurface->surface();
+    connect(surf, &QWaylandSurface::damaged,
+            m_window, [this](const QRegion &) { m_window->update(); });
+    connect(surf, &QWaylandSurface::redraw,
+            m_window, &QQuickWindow::update);
 
     // Clean up when the surface is destroyed.
     connect(xdgSurface->surface(), &QWaylandSurface::surfaceDestroyed,

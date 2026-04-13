@@ -7,6 +7,7 @@
 #include <QWaylandCompositor>
 #include <QWaylandKeyboard>
 #include <QWaylandOutput>
+#include <QWaylandQuickItem>
 #include <QWaylandXdgShell>
 #include <QQuickWindow>
 
@@ -113,6 +114,12 @@ public:
     WorkspaceModel *workspaceModel() { return &m_workspaceModel; }
 
     Q_INVOKABLE void setClientArea(int width, int height);
+    Q_INVOKABLE void forwardMousePress(QWaylandQuickItem *item,
+                                       qreal localX, qreal localY,
+                                       int button);
+    Q_INVOKABLE void forwardMouseRelease(int button);
+    Q_INVOKABLE void forwardMouseMove(QWaylandQuickItem *item,
+                                      qreal localX, qreal localY);
 
     void sendPinnedConfigure(int id, int width, int height);
 

@@ -16,19 +16,34 @@
 
 namespace {
 
-QProcess *launchClock(QObject *parent, const QString &socketName)
+QProcessEnvironment clientEnv(const QString &socketName)
 {
-    auto *clock = new QProcess(parent);
-    clock->setProgram(QGuiApplication::applicationDirPath()
-                      + QStringLiteral("/botnik-clock"));
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     env.insert(QStringLiteral("QT_QPA_PLATFORM"), QStringLiteral("wayland"));
     env.insert(QStringLiteral("WAYLAND_DISPLAY"), socketName);
     env.insert(QStringLiteral("QT_SCALE_FACTOR"), QStringLiteral("1"));
     env.insert(QStringLiteral("QT_WAYLAND_DISABLE_WINDOWDECORATION"), QStringLiteral("1"));
-    clock->setProcessEnvironment(env);
+    return env;
+}
+
+QProcess *launchClock(QObject *parent, const QString &socketName)
+{
+    auto *clock = new QProcess(parent);
+    clock->setProgram(QGuiApplication::applicationDirPath()
+                      + QStringLiteral("/botnik-clock"));
+    clock->setProcessEnvironment(clientEnv(socketName));
     clock->start();
     return clock;
+}
+
+QProcess *launchWifi(QObject *parent, const QString &socketName)
+{
+    auto *wifi = new QProcess(parent);
+    wifi->setProgram(QGuiApplication::applicationDirPath()
+                     + QStringLiteral("/botnik-wifi"));
+    wifi->setProcessEnvironment(clientEnv(socketName));
+    wifi->start();
+    return wifi;
 }
 
 } // namespace
@@ -97,8 +112,9 @@ static int runHeadless(QGuiApplication &app, const QString &socketName)
 
     StdinReader stdinReader(&chatModel);
 
-    // Launch the clock client against the headless compositor.
+    // Launch the clock and wifi clients against the headless compositor.
     QProcess *clock = launchClock(&app, compositor.socketName());
+    QProcess *wifi = launchWifi(&app, compositor.socketName());
 
     // Optional second clock for testing multi-window behavior headlessly.
     // Off by default; set BOTNIK_EXTRA_CLOCK=1 to enable.
@@ -110,8 +126,8 @@ static int runHeadless(QGuiApplication &app, const QString &socketName)
     }
 
     QObject::connect(&app, &QCoreApplication::aboutToQuit, &app,
-                     [&clock, &extraClock, &appLauncher]() {
-        for (QProcess *p : {clock, extraClock}) {
+                     [&clock, &wifi, &extraClock, &appLauncher]() {
+        for (QProcess *p : {clock, wifi, extraClock}) {
             if (p && p->state() != QProcess::NotRunning) {
                 p->kill();
                 p->waitForFinished(500);
@@ -150,8 +166,9 @@ static int runGui(QGuiApplication &app)
     view.setSource(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
     view.show();
 
-    // Launch the clock client as a Wayland client of this compositor.
+    // Launch the clock and wifi clients as Wayland clients of this compositor.
     QProcess *clock = launchClock(&app, compositor.socketName());
+    QProcess *wifi = launchWifi(&app, compositor.socketName());
 
     // Optional second clock for manual testing of workspace switching.
     // Off by default; set BOTNIK_EXTRA_CLOCK=1 to enable. Delayed so the
@@ -164,8 +181,8 @@ static int runGui(QGuiApplication &app)
     }
 
     QObject::connect(&app, &QCoreApplication::aboutToQuit, &app,
-                     [&clock, &extraClock, &appLauncher]() {
-        for (QProcess *p : {clock, extraClock}) {
+                     [&clock, &wifi, &extraClock, &appLauncher]() {
+        for (QProcess *p : {clock, wifi, extraClock}) {
             if (p && p->state() != QProcess::NotRunning) {
                 p->kill();
                 p->waitForFinished(500);

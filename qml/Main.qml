@@ -7,7 +7,7 @@ Rectangle {
     id: root
     color: "#002b36"
 
-    readonly property bool hasActiveWorkspace: workspaceModel.activeIndex >= 0
+    readonly property bool hasActiveWorkspace: workspaceModel.activeIndex >= 0 && (workspaceModel.count - workspaceModel.pinnedCount) > 0
 
     RowLayout {
         anchors.fill: parent
@@ -21,47 +21,66 @@ Rectangle {
             visible: root.hasActiveWorkspace
             spacing: 0
 
-            // Tab bar
+            // Tab bar (unpinned workspaces only)
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 32
                 color: "#073642"
                 radius: 4
 
-                ListView {
+                Row {
                     id: tabBar
                     anchors.fill: parent
                     anchors.margins: 2
-                    orientation: ListView.Horizontal
-                    model: workspaceModel
                     spacing: 4
-                    clip: true
 
-                    delegate: Rectangle {
-                        width: tabLabel.implicitWidth + 24
-                        height: tabBar.height
-                        color: index === workspaceModel.activeIndex ? "#2aa198" : "#002b36"
-                        radius: 3
+                    Repeater {
+                        model: workspaceModel
 
-                        Text {
-                            id: tabLabel
-                            anchors.centerIn: parent
-                            text: model.title
-                            color: index === workspaceModel.activeIndex ? "#002b36" : "#839496"
-                            font.family: "monospace"
-                            font.pixelSize: 12
-                            elide: Text.ElideRight
-                        }
+                        Rectangle {
+                            visible: !model.pinned
+                            width: visible ? badgeText.implicitWidth + tabLabel.implicitWidth + 28 : 0
+                            height: tabBar.height
+                            color: index === workspaceModel.activeIndex ? "#2aa198" : "#002b36"
+                            radius: 3
 
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: workspaceModel.activateWorkspace(index)
+                            readonly property int unpinnedPos: workspaceModel.unpinnedPositionOf(index)
+
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 4
+
+                                Text {
+                                    id: badgeText
+                                    text: unpinnedPos >= 0 && unpinnedPos < 9 ? (unpinnedPos + 1).toString() : ""
+                                    color: index === workspaceModel.activeIndex ? "#002b36" : "#586e75"
+                                    font.family: "monospace"
+                                    font.pixelSize: 10
+                                    font.bold: true
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+
+                                Text {
+                                    id: tabLabel
+                                    text: model.title
+                                    color: index === workspaceModel.activeIndex ? "#002b36" : "#839496"
+                                    font.family: "monospace"
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: workspaceModel.activateWorkspace(index)
+                            }
                         }
                     }
                 }
             }
 
-            // Workspace surface area (tiled)
+            // Workspace surface area (single active, virtual desktop)
             Item {
                 id: workspaceArea
                 Layout.fillWidth: true
@@ -84,19 +103,12 @@ Rectangle {
                     ShellSurfaceItem {
                         shellSurface: model.xdgSurface
                         autoCreatePopupItems: false
+                        visible: !model.pinned && index === workspaceModel.activeIndex
 
-                        // Tiling geometry
-                        readonly property int totalCount: workspaceModel.count
-                        readonly property int cols: Math.min(totalCount, 2)
-                        readonly property int rows: Math.ceil(totalCount / cols)
-                        readonly property int row: Math.floor(index / cols)
-                        readonly property int col: index % cols
-                        readonly property int itemsInRow: (row === rows - 1) ? (totalCount - row * cols) : cols
-
-                        x: col * (workspaceArea.width / itemsInRow)
-                        y: row * (workspaceArea.height / rows)
-                        width: workspaceArea.width / itemsInRow
-                        height: workspaceArea.height / rows
+                        x: 0
+                        y: 0
+                        width: workspaceArea.width
+                        height: workspaceArea.height
                     }
                 }
             }
@@ -109,6 +121,40 @@ Rectangle {
             Layout.fillWidth: !root.hasActiveWorkspace
             Layout.fillHeight: true
             spacing: 8
+
+            // Pinned surfaces
+            Column {
+                Layout.fillWidth: true
+                spacing: 4
+                visible: workspaceModel.pinnedCount > 0
+
+                Repeater {
+                    id: pinnedRepeater
+                    model: workspaceModel
+
+                    Item {
+                        visible: model.pinned
+                        width: visible ? chatSidebar.width : 0
+                        height: visible ? 200 : 0
+
+                        onWidthChanged: sendPinnedSize()
+                        onHeightChanged: sendPinnedSize()
+                        onVisibleChanged: sendPinnedSize()
+
+                        function sendPinnedSize() {
+                            if (visible && width > 0 && height > 0) {
+                                compositor.sendPinnedConfigure(model.surfaceId, Math.round(width), Math.round(height));
+                            }
+                        }
+
+                        ShellSurfaceItem {
+                            shellSurface: model.xdgSurface
+                            autoCreatePopupItems: false
+                            anchors.fill: parent
+                        }
+                    }
+                }
+            }
 
             ListView {
                 id: messageList
@@ -185,7 +231,17 @@ Rectangle {
             input.forceActiveFocus();
         }
         function onHotkeyActivateWorkspace(index) {
-            workspaceModel.activateWorkspace(index);
+            // index is 0-based unpinned position; map to model row
+            var row = workspaceModel.nthUnpinnedIndex(index);
+            if (row >= 0)
+                workspaceModel.activateWorkspace(row);
+        }
+        function onHotkeyCycleWorkspace(direction) {
+            var current = workspaceModel.activeIndex;
+            if (current < 0) return;
+            var next = workspaceModel.nextUnpinnedIndex(current, direction);
+            if (next >= 0)
+                workspaceModel.activateWorkspace(next);
         }
     }
 }

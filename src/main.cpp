@@ -42,6 +42,11 @@ QProcess *launchVolume(QObject *parent, const QString &socketName)
     return launchClient(parent, socketName, QStringLiteral("botnik-volume"));
 }
 
+QProcess *launchBattery(QObject *parent, const QString &socketName)
+{
+    return launchClient(parent, socketName, QStringLiteral("botnik-battery"));
+}
+
 } // namespace
 
 static bool isHeadless(int argc, char *argv[])
@@ -111,6 +116,7 @@ static int runHeadless(QGuiApplication &app, const QString &socketName)
     // Launch widget clients against the headless compositor.
     QProcess *clock = launchClock(&app, compositor.socketName());
     QProcess *volume = launchVolume(&app, compositor.socketName());
+    QProcess *battery = launchBattery(&app, compositor.socketName());
 
     // Optional second clock for testing multi-window behavior headlessly.
     // Off by default; set BOTNIK_EXTRA_CLOCK=1 to enable.
@@ -122,8 +128,8 @@ static int runHeadless(QGuiApplication &app, const QString &socketName)
     }
 
     QObject::connect(&app, &QCoreApplication::aboutToQuit, &app,
-                     [&clock, &volume, &extraClock, &appLauncher]() {
-        for (QProcess *p : {clock, volume, extraClock}) {
+                     [&clock, &volume, &battery, &extraClock, &appLauncher]() {
+        for (QProcess *p : {clock, volume, battery, extraClock}) {
             if (p && p->state() != QProcess::NotRunning) {
                 p->kill();
                 p->waitForFinished(500);
@@ -165,6 +171,7 @@ static int runGui(QGuiApplication &app)
     // Launch widget clients as Wayland clients of this compositor.
     QProcess *clock = launchClock(&app, compositor.socketName());
     QProcess *volume = launchVolume(&app, compositor.socketName());
+    QProcess *battery = launchBattery(&app, compositor.socketName());
 
     // Optional second clock for manual testing of workspace switching.
     // Off by default; set BOTNIK_EXTRA_CLOCK=1 to enable. Delayed so the
@@ -177,8 +184,8 @@ static int runGui(QGuiApplication &app)
     }
 
     QObject::connect(&app, &QCoreApplication::aboutToQuit, &app,
-                     [&clock, &volume, &extraClock, &appLauncher]() {
-        for (QProcess *p : {clock, volume, extraClock}) {
+                     [&clock, &volume, &battery, &extraClock, &appLauncher]() {
+        for (QProcess *p : {clock, volume, battery, extraClock}) {
             if (p && p->state() != QProcess::NotRunning) {
                 p->kill();
                 p->waitForFinished(500);

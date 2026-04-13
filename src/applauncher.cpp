@@ -15,6 +15,7 @@ AppLauncher::AppLauncher(const QString &waylandSocket, QObject *parent)
     m_apps.insert(QStringLiteral("clock"), QStringLiteral("botnik-clock"));
     m_apps.insert(QStringLiteral("config"), QStringLiteral("botnik-config"));
     m_apps.insert(QStringLiteral("volume"), QStringLiteral("botnik-volume"));
+    m_apps.insert(QStringLiteral("battery"), QStringLiteral("botnik-battery"));
 }
 
 bool AppLauncher::launch(const QString &name, QString *error)

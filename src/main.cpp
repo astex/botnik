@@ -98,22 +98,24 @@ static int runHeadless(QGuiApplication &app, const QString &socketName)
     StdinReader stdinReader(&chatModel);
 
     // Launch the clock client against the headless compositor.
-    auto *clock = new QProcess(&app);
-    clock->setProgram(QGuiApplication::applicationDirPath()
-                      + QStringLiteral("/botnik-clock"));
-    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-    env.insert(QStringLiteral("QT_QPA_PLATFORM"), QStringLiteral("wayland"));
-    env.insert(QStringLiteral("WAYLAND_DISPLAY"), compositor.socketName());
-    env.insert(QStringLiteral("QT_SCALE_FACTOR"), QStringLiteral("1"));
-    env.insert(QStringLiteral("QT_WAYLAND_DISABLE_WINDOWDECORATION"), QStringLiteral("1"));
-    clock->setProcessEnvironment(env);
-    clock->start();
+    QProcess *clock = launchClock(&app, compositor.socketName());
+
+    // Optional second clock for testing multi-window behavior headlessly.
+    // Off by default; set BOTNIK_EXTRA_CLOCK=1 to enable.
+    QProcess *extraClock = nullptr;
+    if (qEnvironmentVariableIntValue("BOTNIK_EXTRA_CLOCK") > 0) {
+        QTimer::singleShot(1500, &app, [&app, &compositor, &extraClock]() {
+            extraClock = launchClock(&app, compositor.socketName());
+        });
+    }
 
     QObject::connect(&app, &QCoreApplication::aboutToQuit, &app,
-                     [clock, &appLauncher]() {
-        if (clock->state() != QProcess::NotRunning) {
-            clock->kill();
-            clock->waitForFinished(500);
+                     [&clock, &extraClock, &appLauncher]() {
+        for (QProcess *p : {clock, extraClock}) {
+            if (p && p->state() != QProcess::NotRunning) {
+                p->kill();
+                p->waitForFinished(500);
+            }
         }
         appLauncher.shutdown();
     });

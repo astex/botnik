@@ -14,216 +14,224 @@ Rectangle {
         anchors.margins: 16
         spacing: 12
 
-        // Left: workspace area with tab bar
-        ColumnLayout {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            visible: root.hasActiveWorkspace
-            spacing: 0
-
-            // Tab bar (unpinned workspaces only)
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 32
-                color: "#073642"
-                radius: 4
-
-                Row {
-                    id: tabBar
-                    anchors.fill: parent
-                    anchors.margins: 2
-                    spacing: 4
-
-                    Repeater {
-                        model: workspaceModel
-
-                        Rectangle {
-                            visible: !model.pinned
-                            width: visible ? badgeText.implicitWidth + tabLabel.implicitWidth + 28 : 0
-                            height: tabBar.height
-                            color: index === workspaceModel.activeIndex ? "#2aa198" : "#002b36"
-                            radius: 3
-
-                            readonly property int unpinnedPos: workspaceModel.unpinnedPositionOf(index)
-
-                            Row {
-                                anchors.centerIn: parent
-                                spacing: 4
-
-                                Text {
-                                    id: badgeText
-                                    text: unpinnedPos >= 0 && unpinnedPos < 9 ? (unpinnedPos + 1).toString() : ""
-                                    color: index === workspaceModel.activeIndex ? "#002b36" : "#586e75"
-                                    font.family: "monospace"
-                                    font.pixelSize: 10
-                                    font.bold: true
-                                    anchors.verticalCenter: parent.verticalCenter
-                                }
-
-                                Text {
-                                    id: tabLabel
-                                    text: model.title
-                                    color: index === workspaceModel.activeIndex ? "#002b36" : "#839496"
-                                    font.family: "monospace"
-                                    font.pixelSize: 12
-                                    elide: Text.ElideRight
-                                    anchors.verticalCenter: parent.verticalCenter
-                                }
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: workspaceModel.activateWorkspace(index)
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Workspace surface area (single active, virtual desktop)
-            Item {
-                id: workspaceArea
+            // Left: workspace area with tab bar
+            ColumnLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                visible: root.hasActiveWorkspace
+                spacing: 0
 
-                onWidthChanged: reportSize()
-                onHeightChanged: reportSize()
-                onVisibleChanged: reportSize()
+                // Tab bar (unpinned workspaces only)
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 32
+                    color: "#073642"
+                    radius: 4
 
-                function reportSize() {
-                    if (visible && width > 0 && height > 0) {
-                        compositor.setClientArea(Math.round(width), Math.round(height));
-                    }
-                }
+                    Row {
+                        id: tabBar
+                        anchors.fill: parent
+                        anchors.margins: 2
+                        spacing: 4
 
-                Repeater {
-                    id: workspaceRepeater
-                    model: workspaceModel
+                        Repeater {
+                            model: workspaceModel
 
-                    ShellSurfaceItem {
-                        shellSurface: model.xdgSurface
-                        autoCreatePopupItems: false
-                        visible: !model.pinned && index === workspaceModel.activeIndex
+                            Rectangle {
+                                visible: !model.pinned
+                                width: visible ? badgeText.implicitWidth + tabLabel.implicitWidth + 28 : 0
+                                height: tabBar.height
+                                color: index === workspaceModel.activeIndex ? "#2aa198" : "#002b36"
+                                radius: 3
 
-                        x: 0
-                        y: 0
-                        width: workspaceArea.width
-                        height: workspaceArea.height
-                    }
-                }
-            }
-        }
+                                readonly property int unpinnedPos: workspaceModel.unpinnedPositionOf(index)
 
-        // Right: chat sidebar (always visible)
-        ColumnLayout {
-            id: chatSidebar
-            Layout.preferredWidth: root.hasActiveWorkspace ? 320 : -1
-            Layout.fillWidth: !root.hasActiveWorkspace
-            Layout.fillHeight: true
-            spacing: 8
+                                Row {
+                                    anchors.centerIn: parent
+                                    spacing: 4
 
-            // Pinned surfaces
-            Column {
-                Layout.fillWidth: true
-                spacing: 4
-                visible: workspaceModel.pinnedCount > 0
+                                    Text {
+                                        id: badgeText
+                                        text: unpinnedPos >= 0 && unpinnedPos < 9 ? (unpinnedPos + 1).toString() : ""
+                                        color: index === workspaceModel.activeIndex ? "#002b36" : "#586e75"
+                                        font.family: "monospace"
+                                        font.pixelSize: 10
+                                        font.bold: true
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
 
-                Repeater {
-                    id: pinnedRepeater
-                    model: workspaceModel
+                                    Text {
+                                        id: tabLabel
+                                        text: model.title
+                                        color: index === workspaceModel.activeIndex ? "#002b36" : "#839496"
+                                        font.family: "monospace"
+                                        font.pixelSize: 12
+                                        elide: Text.ElideRight
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
 
-                    Item {
-                        visible: model.pinned
-                        width: visible ? chatSidebar.width : 0
-                        height: visible ? 200 : 0
-
-                        onWidthChanged: sendPinnedSize()
-                        onHeightChanged: sendPinnedSize()
-                        onVisibleChanged: sendPinnedSize()
-
-                        function sendPinnedSize() {
-                            if (visible && width > 0 && height > 0) {
-                                compositor.sendPinnedConfigure(model.surfaceId, Math.round(width), Math.round(height));
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: workspaceModel.activateWorkspace(index)
+                                }
                             }
                         }
+                    }
+                }
+
+                // Workspace surface area (single active, virtual desktop)
+                Item {
+                    id: workspaceArea
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+
+                    onWidthChanged: reportSize()
+                    onHeightChanged: reportSize()
+                    onVisibleChanged: reportSize()
+
+                    function reportSize() {
+                        if (visible && width > 0 && height > 0) {
+                            compositor.setClientArea(Math.round(width), Math.round(height));
+                        }
+                    }
+
+                    Repeater {
+                        id: workspaceRepeater
+                        model: workspaceModel
 
                         ShellSurfaceItem {
                             shellSurface: model.xdgSurface
                             autoCreatePopupItems: false
-                            anchors.fill: parent
+                            visible: !model.pinned && index === workspaceModel.activeIndex
+
+                            x: 0
+                            y: 0
+                            width: workspaceArea.width
+                            height: workspaceArea.height
                         }
                     }
                 }
             }
 
-            ListView {
-                id: messageList
-                Layout.fillWidth: true
+            // Right: chat sidebar (always visible)
+            ColumnLayout {
+                id: chatSidebar
+                Layout.preferredWidth: root.hasActiveWorkspace ? 320 : -1
+                Layout.fillWidth: !root.hasActiveWorkspace
                 Layout.fillHeight: true
-                model: chatModel
-                clip: true
                 spacing: 8
 
-                delegate: Rectangle {
-                    width: messageList.width
-                    height: msgText.implicitHeight + 16
-                    color: model.role === "user" ? "#073642" : "#002b36"
-                    radius: 6
+                ListView {
+                    id: messageList
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    model: chatModel
+                    clip: true
+                    spacing: 8
 
-                    Text {
-                        id: msgText
-                        anchors.fill: parent
-                        anchors.margins: 8
-                        text: model.content
-                        color: model.role === "user" ? "#839496" : "#2aa198"
-                        wrapMode: Text.Wrap
-                        font.family: "monospace"
-                        font.pixelSize: 14
+                    delegate: Rectangle {
+                        width: messageList.width
+                        height: msgText.implicitHeight + 16
+                        color: model.role === "user" ? "#073642" : "#002b36"
+                        radius: 6
+
+                        Text {
+                            id: msgText
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            text: model.content
+                            color: model.role === "user" ? "#839496" : "#2aa198"
+                            wrapMode: Text.Wrap
+                            font.family: "monospace"
+                            font.pixelSize: 14
+                        }
                     }
-                }
 
-                onCountChanged: {
-                    Qt.callLater(function() {
-                        messageList.positionViewAtEnd();
-                    });
-                }
-
-                Connections {
-                    target: chatModel
-                    function onDataChanged() {
+                    onCountChanged: {
                         Qt.callLater(function() {
                             messageList.positionViewAtEnd();
                         });
                     }
+
+                    Connections {
+                        target: chatModel
+                        function onDataChanged() {
+                            Qt.callLater(function() {
+                                messageList.positionViewAtEnd();
+                            });
+                        }
+                    }
                 }
-            }
 
-            Rectangle {
-                Layout.fillWidth: true
-                height: 40
-                color: "#073642"
-                radius: 6
+                // Prompt + pinned surfaces side by side
+                Row {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    layoutDirection: Qt.LeftToRight
 
-                TextInput {
-                    id: input
-                    anchors.fill: parent
-                    anchors.margins: 8
-                    color: "#839496"
-                    font.family: "monospace"
-                    font.pixelSize: 14
-                    clip: true
-                    focus: true
+                    Rectangle {
+                        width: parent.width - pinnedRow.width - (pinnedRow.visible ? parent.spacing : 0)
+                        height: 40
+                        color: "#073642"
+                        radius: 6
 
-                    onAccepted: {
-                        if (text.trim().length > 0) {
-                            chatModel.addUserMessage(text);
-                            text = "";
+                        TextInput {
+                            id: input
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            color: "#839496"
+                            font.family: "monospace"
+                            font.pixelSize: 14
+                            clip: true
+                            focus: true
+
+                            onAccepted: {
+                                if (text.trim().length > 0) {
+                                    chatModel.addUserMessage(text);
+                                    text = "";
+                                }
+                            }
+                        }
+                    }
+
+                    // Pinned surfaces
+                    Row {
+                        id: pinnedRow
+                        spacing: 4
+                        visible: workspaceModel.pinnedCount > 0
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        Repeater {
+                            id: pinnedRepeater
+                            model: workspaceModel
+
+                            Item {
+                                visible: model.pinned
+                                width: visible ? 200 : 0
+                                height: visible ? 40 : 0
+
+                                onWidthChanged: sendPinnedSize()
+                                onHeightChanged: sendPinnedSize()
+                                onVisibleChanged: sendPinnedSize()
+
+                                function sendPinnedSize() {
+                                    if (visible && width > 0 && height > 0) {
+                                        compositor.sendPinnedConfigure(model.surfaceId, Math.round(width), Math.round(height));
+                                    }
+                                }
+
+                                ShellSurfaceItem {
+                                    shellSurface: model.xdgSurface
+                                    autoCreatePopupItems: false
+                                    anchors.fill: parent
+                                }
+                            }
                         }
                     }
                 }
             }
         }
-    }
 
     Connections {
         target: compositor

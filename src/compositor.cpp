@@ -172,6 +172,11 @@ bool WorkspaceModel::unpinFromSidebar(int id)
     QModelIndex mi = index(idx);
     emit dataChanged(mi, mi, {PinnedRole});
     emit pinnedCountChanged();
+
+    // If no unpinned workspace is active, activate the newly unpinned one.
+    if (m_activeIndex < 0 || m_pinnedIds.contains(m_workspaces.at(m_activeIndex).id))
+        setActiveIndex(idx);
+
     return true;
 }
 
@@ -413,6 +418,18 @@ void Compositor::onToplevelCreated(QWaylandXdgToplevel *toplevel,
     // Add first, then reconfigureTiles (triggered by countChanged) sends
     // each toplevel a configure with the correct per-tile size.
     m_workspaceModel.addWorkspace(xdgSurface, toplevel);
+
+    // Auto-pin the clock to the sidebar so the default view is agent-only.
+    if (toplevel) {
+        int wsId = m_workspaceModel.workspaceAt(m_workspaceModel.count() - 1).id;
+        auto tryAutoPin = [this, toplevel, wsId]() {
+            if (toplevel->title() == QStringLiteral("botnik-clock"))
+                m_workspaceModel.pinToSidebar(wsId);
+        };
+        tryAutoPin(); // Title may already be set.
+        connect(toplevel, &QWaylandXdgToplevel::titleChanged,
+                this, tryAutoPin);
+    }
 
     // If QML hasn't reported a client area yet, reconfigureTiles() is a
     // no-op.  The xdg-shell protocol still requires an initial configure,

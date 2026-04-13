@@ -139,7 +139,7 @@ public:
     WifiWindow()
     {
         setFlags(Qt::FramelessWindowHint);
-        resize(300, 40);
+        resize(150, 40);
         setTitle(QStringLiteral("botnik-wifi"));
 
         auto *timer = new QTimer(this);
@@ -151,27 +151,78 @@ protected:
     void paintEvent(QPaintEvent *) override
     {
         QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing, true);
         p.fillRect(0, 0, width(), height(), QColor("#002b36"));
 
-        p.setPen(QColor("#2aa198"));
-        p.setFont(QFont("monospace", 14));
+        const QColor teal("#2aa198");
+        const QColor dimTeal("#0e4f49");
 
         WifiInfo info = readWifiInfo();
+        bool disconnected = info.qualityPercent < 0 && info.ssid.isEmpty();
 
-        QString text;
-        if (info.qualityPercent < 0 && info.ssid.isEmpty()) {
-            text = QStringLiteral("NO WIFI");
-        } else {
-            QString qualStr = info.qualityPercent >= 0
-                ? QStringLiteral("%1%").arg(info.qualityPercent)
-                : QStringLiteral("??%");
-            QString ssid = info.ssid.isEmpty()
-                ? QStringLiteral("(unknown)")
-                : info.ssid;
-            text = QStringLiteral("%1 %2 %3").arg(info.iface, ssid, qualStr);
+        // Determine how many arcs to fill (1-3) based on signal quality.
+        int filledArcs = 0;
+        if (!disconnected && info.qualityPercent >= 0) {
+            if (info.qualityPercent >= 67)
+                filledArcs = 3;
+            else if (info.qualityPercent >= 34)
+                filledArcs = 2;
+            else
+                filledArcs = 1;
         }
 
-        p.drawText(QRect(0, 0, width(), height()), Qt::AlignCenter, text);
+        // Draw WiFi icon in the left portion of the window.
+        // Icon is centered in a 36x36 area with 2px left margin.
+        const int iconSize = 30;
+        const int iconLeft = 4;
+        const int iconCenterX = iconLeft + iconSize / 2;
+        const int iconBottom = height() - 6;
+
+        // Draw the base dot.
+        const int dotRadius = 3;
+        p.setPen(Qt::NoPen);
+        p.setBrush(disconnected ? dimTeal : teal);
+        p.drawEllipse(QPoint(iconCenterX, iconBottom), dotRadius, dotRadius);
+
+        // Draw 3 concentric quarter-circle arcs radiating upward.
+        // QPainter::drawArc uses 1/16th degree units.
+        // We draw arcs from 45 degrees to 135 degrees (a 90-degree span).
+        const int startAngle = 45 * 16;
+        const int spanAngle = 90 * 16;
+        const int arcRadii[] = {10, 17, 24};
+
+        for (int i = 0; i < 3; ++i) {
+            int r = arcRadii[i];
+            QRect arcRect(iconCenterX - r, iconBottom - r, r * 2, r * 2);
+
+            bool active = !disconnected && (i + 1) <= filledArcs;
+            QPen arcPen(active ? teal : dimTeal, 2.5);
+            p.setPen(arcPen);
+            p.setBrush(Qt::NoBrush);
+            p.drawArc(arcRect, startAngle, spanAngle);
+        }
+
+        // Draw an X over the icon if disconnected.
+        if (disconnected) {
+            QPen xPen(QColor("#dc322f"), 2);
+            p.setPen(xPen);
+            int xSize = 6;
+            int xCenterY = iconBottom - iconSize / 2;
+            p.drawLine(iconCenterX - xSize, xCenterY - xSize,
+                       iconCenterX + xSize, xCenterY + xSize);
+            p.drawLine(iconCenterX - xSize, xCenterY + xSize,
+                       iconCenterX + xSize, xCenterY - xSize);
+        }
+
+        // Draw SSID text to the right of the icon.
+        p.setPen(teal);
+        p.setFont(QFont("monospace", 10));
+        QString label = disconnected
+            ? QStringLiteral("No WiFi")
+            : (info.ssid.isEmpty() ? QStringLiteral("(unknown)") : info.ssid);
+        int textLeft = iconLeft + iconSize + 6;
+        QRect textRect(textLeft, 0, width() - textLeft - 2, height());
+        p.drawText(textRect, Qt::AlignVCenter | Qt::AlignLeft, label);
     }
 };
 
